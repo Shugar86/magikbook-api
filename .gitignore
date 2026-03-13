@@ -1,0 +1,12 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+*.log
+venv/
+.cache/
+data/backups/
+uploads/
+*.backup
+bun.backup
+
