@@ -24,15 +24,23 @@ class PublishPromptRequest(BaseModel):
 
 @router.get("/homepage")
 async def get_homepage_data(db: AsyncSession = Depends(get_db_session)):
-    # 1. Топ текстовых
+    # 1. Топ текстовых (только approved/published)
     text_result = await db.execute(
-        select(Prompt).where(Prompt.media_type == "text").order_by(Prompt.likes_count.desc()).limit(6)
+        select(Prompt)
+        .where(Prompt.media_type == "text")
+        .where(Prompt.moderation_status.in_(["approved", "published"]))
+        .order_by(Prompt.likes_count.desc())
+        .limit(6)
     )
     trending_text = text_result.scalars().all()
 
-    # 2. Топ медиа (картинки/видео)
+    # 2. Топ медиа (картинки/видео) - только approved/published
     media_result = await db.execute(
-        select(Prompt).where(Prompt.media_type.in_(["image", "video"])).order_by(Prompt.elo_rating.desc()).limit(8)
+        select(Prompt)
+        .where(Prompt.media_type.in_(["image", "video"]))
+        .where(Prompt.moderation_status.in_(["approved", "published"]))
+        .order_by(Prompt.elo_rating.desc())
+        .limit(8)
     )
     trending_media = media_result.scalars().all()
 
@@ -75,8 +83,9 @@ async def get_prompts_feed(
     page_size: int = 20,
     db: AsyncSession = Depends(get_db_session)
 ):
-    query = select(Prompt)
-    
+    # Только approved/published промпты в публичном фиде
+    query = select(Prompt).where(Prompt.moderation_status.in_(["approved", "published"]))
+
     if media_type:
         query = query.where(Prompt.media_type == media_type)
     if category:
@@ -98,9 +107,11 @@ async def get_prompts_feed(
     result = await db.execute(query)
     prompts = result.scalars().all()
     
-    # Total count (optional but helpful)
+    # Total count (optional but helpful) - только approved/published
     from sqlalchemy import func
-    count_query = select(func.count()).select_from(Prompt)
+    count_query = select(func.count()).select_from(Prompt).where(
+        Prompt.moderation_status.in_(["approved", "published"])
+    )
     if media_type:
         count_query = count_query.where(Prompt.media_type == media_type)
     if category:
@@ -185,6 +196,10 @@ async def get_prompt(
 ):
     prompt = await db.get(Prompt, prompt_id)
     if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    # Проверка moderation_status для публичного доступа
+    if prompt.moderation_status not in ("approved", "published"):
         raise HTTPException(status_code=404, detail="Prompt not found")
         
     return {
