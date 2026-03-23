@@ -82,6 +82,7 @@ class PromptCreate(BaseModel):
     result_example: Optional[str] = Field(default=None, max_length=2000)
     result_image_url: Optional[str] = None
     affiliate_links: Optional[Dict[str, str]] = None
+    target_models: Optional[list[str]] = None  # Allow user to specify target models
 
 
 class AffiliateLinksUpdate(BaseModel):

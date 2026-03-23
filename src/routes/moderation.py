@@ -29,7 +29,7 @@ def _is_admin(user: User) -> bool:
 
 @router.get("/api/moderation")
 async def get_moderation_queue(
-    status: str = "pending",  # pending | approved | rejected | published | all
+    moderation_status: str = "pending",  # pending | approved | rejected | published | all
     page: int = 1,
     page_size: int = 20,
     current_user: User = Depends(get_current_user),
@@ -39,7 +39,7 @@ async def get_moderation_queue(
     Получить список промптов на модерацию.
 
     Args:
-        status: Фильтр по статусу модерации
+        moderation_status: Фильтр по статусу модерации
         page: Номер страницы
         page_size: Количество элементов на странице
 
@@ -54,8 +54,8 @@ async def get_moderation_queue(
 
     query = select(Prompt)
 
-    if status != "all":
-        query = query.where(Prompt.moderation_status == status)
+    if moderation_status != "all":
+        query = query.where(Prompt.moderation_status == moderation_status)
 
     # Сортируем: сначала новые (pending), потом по дате
     query = query.order_by(Prompt.created_at.desc())
