@@ -12,7 +12,9 @@ from src.models.db_models import Prompt
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TEMP_DIR = "/home/tutoradmin/magikbook/temp"
+# NOTE: This path should be configured via environment variable or config
+# for different deployment environments. Default is for development.
+TEMP_DIR = os.getenv("MAGICKBOOK_TEMP_DIR", "/home/tutoradmin/magikbook/temp")
 
 async def import_temp_data():
     await init_db()

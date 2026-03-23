@@ -46,9 +46,13 @@ class BattleService:
         if not winner or not loser:
             raise HTTPException(status_code=404, detail="One or both prompts not found")
 
+        # Save old ELO values before updating
+        old_winner_elo = winner.elo_rating
+        old_loser_elo = loser.elo_rating
+
         # Calculate new ELO ratings using EloService
         new_winner_elo, new_loser_elo = EloService.calculate_new_ratings(
-            winner.elo_rating, loser.elo_rating, k_factor=ELO_K
+            old_winner_elo, old_loser_elo, k_factor=ELO_K
         )
 
         # Apply minimum rating floor
@@ -66,10 +70,10 @@ class BattleService:
         logger.info(
             "ELO updated: winner %s %d→%d, loser %s %d→%d",
             winner_id,
-            winner.elo_rating,
+            old_winner_elo,
             new_winner_elo,
             loser_id,
-            loser.elo_rating,
+            old_loser_elo,
             new_loser_elo,
         )
 

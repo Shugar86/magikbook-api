@@ -81,6 +81,13 @@ class PromptCreate(BaseModel):
     preview_url: Optional[str] = None
     result_example: Optional[str] = Field(default=None, max_length=2000)
     result_image_url: Optional[str] = None
+    affiliate_links: Optional[Dict[str, str]] = None
+
+
+class AffiliateLinksUpdate(BaseModel):
+    """Request model for updating affiliate links (admin only)."""
+
+    affiliate_links: Dict[str, str] = Field(..., description="Dictionary of partner links, e.g. {'midjourney': 'https://...'}")
 
 
 class SiteStats(BaseModel):
