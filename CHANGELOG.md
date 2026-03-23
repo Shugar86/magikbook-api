@@ -1,5 +1,47 @@
 # Changelog
 
+## [2025-03-23] - Production Fixes & SSR/Docker Compatibility
+
+### Исправлено
+
+#### Database Schema
+- **Добавлены колонки в `prompts`** - миграция для полей, отсутствующих в существующей БД:
+  ```sql
+  ALTER TABLE prompts ADD COLUMN result_example VARCHAR;
+  ALTER TABLE prompts ADD COLUMN result_image_url VARCHAR;
+  ALTER TABLE prompts ADD COLUMN affiliate_links_str VARCHAR;
+  ```
+  Эти поля были в модели SQLModel, но отсутствовали в SQLite, что вызывало `OperationalError`.
+
+#### Configuration
+- **FRONTEND_URL** - критически важная переменная для production:
+  - OAuth редиректы (Google/VK) теперь корректно возвращают на `https://magikbook.ru`
+  - Необходимо задать в `.env`: `FRONTEND_URL=https://magikbook.ru`
+
+#### Models Update
+- **SavedPrompt & Like** - миграция с `session_token` на `user_id` (FK):
+  - Теперь сохранённые промпты и лайки привязаны к аккаунту пользователя
+  - Уникальный constraint `(user_id, prompt_id)` предотвращает дублирование
+
+### Production Deployment Notes
+
+```bash
+# 1. Миграция БД (внутри Docker контейнера)
+docker exec magikbook-api sqlite3 /app/magikbook.db "
+ALTER TABLE prompts ADD COLUMN result_example VARCHAR;
+ALTER TABLE prompts ADD COLUMN result_image_url VARCHAR;
+ALTER TABLE prompts ADD COLUMN affiliate_links_str VARCHAR;
+"
+
+# 2. Обновить .env
+echo "FRONTEND_URL=https://magikbook.ru" >> .env
+
+# 3. Пересобрать и перезапустить
+docker compose up -d --build magikbook-api magikbook-frontend
+```
+
+---
+
 ## [Unreleased] - Cabinet, OAuth, Upload, Moderation, Publishing
 
 ### Добавлено
