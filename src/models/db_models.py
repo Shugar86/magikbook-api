@@ -42,6 +42,7 @@ class User(SQLModel, table=True):
     referred_by: Optional[str] = Field(default=None)  # код человека, который привел
     auth_provider: str = Field(default="email")  # "email" | "google" | "vk" | "telegram"
     avatar_url: Optional[str] = Field(default=None)
+    is_admin: bool = Field(default=False)
 
 class Prompt(PromptBase, table=True):
     __tablename__ = "prompts"
@@ -64,6 +65,20 @@ class Prompt(PromptBase, table=True):
     file_path: Optional[str] = Field(default=None)  # Локальный путь к файлу
     vk_post_url: Optional[str] = Field(default=None)
     telegram_message_url: Optional[str] = Field(default=None)
+
+    # Поля для виральности и партнёрской монетизации
+    result_example: Optional[str] = Field(
+        default=None,
+        sa_column_kwargs={"comment": "Текстовый пример результата применения промпта"}
+    )
+    result_image_url: Optional[str] = Field(
+        default=None,
+        sa_column_kwargs={"comment": "URL скриншота или сгенерированного изображения-результата"}
+    )
+    affiliate_links_str: Optional[str] = Field(
+        default=None,
+        sa_column_kwargs={"comment": "JSON dict: {midjourney: url, runway: url, ...}"}
+    )
 
 class SavedPrompt(SQLModel, table=True):
     __tablename__ = "saved_prompts"

@@ -31,11 +31,22 @@ app = FastAPI(
     description="Backend for MagikBook, AI prompt generation and rating system.",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.environment == "development" else None,
+    redoc_url="/redoc" if settings.environment == "development" else None,
+    openapi_url="/openapi.json" if settings.environment == "development" else None,
 )
+
+allowed_origins = [settings.frontend_url]
+if settings.environment == "development":
+    allowed_origins += [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,7 +61,10 @@ app.include_router(paywall.router)
 app.include_router(uploads.router)
 app.include_router(moderation.router)
 app.include_router(publish.router)
-app.include_router(test_setup.router)
+
+if settings.environment == "development":
+    app.include_router(test_setup.router)
+    logger.warning("⚠️  test_setup router ENABLED (dev mode only!)")
 
 import os
 os.makedirs("uploads", exist_ok=True)

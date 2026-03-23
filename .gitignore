@@ -1,12 +1,50 @@
-node_modules/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
 .env
-*.log
+.venv
+env/
 venv/
+ENV/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Media files
+uploads/
+
+# Alembic runtime
+alembic/versions/*.py~
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Node (if any frontend assets)
+node_modules/
+*.log
 .cache/
 data/backups/
-uploads/
 *.backup
 bun.backup
 
