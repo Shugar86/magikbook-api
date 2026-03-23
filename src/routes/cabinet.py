@@ -63,11 +63,15 @@ async def get_cabinet_overview(
     total_likes = sum(p.likes_count for p in user_prompts)
     total_copies = sum(p.copies for p in user_prompts)
 
-    # Find top prompt (by likes_count)
+    # Find top prompt (by likes_count + copies, only approved/published)
     top_prompt: Optional[CabinetTopPrompt] = None
-    if user_prompts:
-        best_prompt = max(user_prompts, key=lambda p: p.likes_count)
-        if best_prompt.likes_count > 0:
+    approved_prompts = [
+        p for p in user_prompts
+        if p.moderation_status in ("approved", "published")
+    ]
+    if approved_prompts:
+        best_prompt = max(approved_prompts, key=lambda p: p.likes_count + p.copies)
+        if best_prompt.likes_count + best_prompt.copies > 0:
             top_prompt = CabinetTopPrompt(
                 id=best_prompt.id,
                 title=best_prompt.title,
