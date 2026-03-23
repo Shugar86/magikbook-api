@@ -1,6 +1,39 @@
 # Changelog
 
-## [2025-03-23] - Gemini API Rate Limit Fix
+## [2025-03-23] - Gemini API Rate Limit Fix & Auth Stabilization
+
+### Исправлено (Backend)
+
+#### Gemini Service
+- **Мульти-модельный fallback** — автоматический переключение при rate limit:
+  - Приоритет:
+    1. `gemini-2.5-flash-lite` — самая быстрая и дешевая
+    2. `gemini-2.5-flash` — основная модель 2.5 поколения
+    3. `gemini-2.0-flash-lite` — стабильная lite версия 2.0
+    4. `gemini-2.0-flash` — стандартная 2.0
+    5. `gemini-1.5-flash` — запасная предыдущего поколения
+  - Автоматический retry при 429 Too Many Requests
+  - Обработка "model not found" — автопереключение если модель недоступна
+  - Логирование каждой попытки модели
+  - Graceful degradation с информативным сообщением пользователю
+
+### Исправлено (Frontend)
+
+#### Auth Flow Stabilization
+- **Header state management** — сброс состояния при открытии/закрытии модалки
+- **Submit page** — устранён re-auth loop
+- **Cookie propagation** — корректная передача всех Set-Cookie заголовков
+- **Upload path** — исправлен путь `/api/prompts/upload` → `/api/upload`
+
+### Deployment
+```bash
+# Пересобрать и перезапустить
+cd /opt/projects/magikbook-api
+docker compose up -d --build magikbook-api
+
+cd /opt/projects/magikbook
+docker compose up -d --build magikbook-frontend
+```
 
 ### Исправлено (Backend)
 
