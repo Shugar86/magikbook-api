@@ -23,6 +23,8 @@ async def upload_prompt(
     category: str = Form(...),
     media_type: str = Form(..., pattern="^(text|image|video)$"),
     ai_model: Optional[str] = Form(None),
+    result_example: Optional[str] = Form(None),
+    result_image_url: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session)
@@ -85,6 +87,8 @@ async def upload_prompt(
         moderation_status="pending",
         ai_model=ai_model,
         file_path=None,  # Пока None, обновим после сохранения файла
+        result_example=result_example,
+        result_image_url=result_image_url,
     )
 
     db.add(prompt)
@@ -129,7 +133,7 @@ async def upload_prompt(
 
 @router.get("/api/prompts/my-uploads")
 async def get_my_uploads(
-    status: Optional[str] = None,
+    moderation_status: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session)
 ):
@@ -137,7 +141,7 @@ async def get_my_uploads(
     Получить список загруженных пользователем промптов.
 
     Args:
-        status: Фильтр по статусу модерации ("pending", "approved", "rejected", "published")
+        moderation_status: Фильтр по статусу модерации ("pending", "approved", "rejected", "published")
 
     Returns:
         list: Список промптов пользователя
@@ -146,8 +150,8 @@ async def get_my_uploads(
 
     query = select(Prompt).where(Prompt.author_id == current_user.id)
 
-    if status and status != "all":
-        query = query.where(Prompt.moderation_status == status)
+    if moderation_status and moderation_status != "all":
+        query = query.where(Prompt.moderation_status == moderation_status)
 
     # Сортируем по дате создания (новые сначала)
     query = query.order_by(Prompt.created_at.desc())
