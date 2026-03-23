@@ -1,5 +1,31 @@
 # Changelog
 
+## [2025-03-23] - Gemini API Rate Limit Fix
+
+### Исправлено (Backend)
+
+#### Gemini Service
+- **Мульти-модельный fallback** — автоматический переключение при rate limit:
+  - Приоритет: `gemini-2.0-flash-lite` → `gemini-2.0-flash` → `gemini-1.5-flash`
+  - `flash-lite` — самая быстрая и дешевая модель для базовых задач
+  - Автоматический retry при 429 Too Many Requests
+  - Graceful degradation с информативным сообщением пользователю
+
+- **Улучшенная обработка ошибок**:
+  - Детекция rate limit ошибок по коду 429 и тексту "Quota exceeded"
+  - Логирование каждой попытки модели
+  - Чёткое сообщение при исчерпании всех квот
+
+### Deployment
+```bash
+# Пересобрать и перезапустить бэкенд
+cd /opt/projects/magikbook-api
+git pull
+docker compose up -d --build magikbook-api
+```
+
+---
+
 ## [2025-03-23] - Frontend Auth UI Fixes
 
 ### Исправлено (Frontend)

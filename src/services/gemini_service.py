@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from asyncio import TimeoutError, timeout
 from typing import AsyncIterator
 
@@ -11,6 +12,13 @@ from src.models.schemas import GenerateRequest
 logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=settings.google_api_key)
+
+# Модели по приоритету: от быстрой/дешевой к запасным
+GEMINI_MODELS = [
+    "gemini-2.0-flash-lite",  # Самая быстрая и дешевая
+    "gemini-2.0-flash",       # Стандартная
+    "gemini-1.5-flash",       # Запасная предыдущего поколения
+]
 
 
 def build_system_prompt(request: GenerateRequest) -> str:
@@ -28,11 +36,16 @@ def build_system_prompt(request: GenerateRequest) -> str:
 
 class GeminiService:
     @staticmethod
-    async def generate_prompt_stream(request: GenerateRequest) -> AsyncIterator[str]:
+    async def _try_generate_with_model(
+        model: str,
+        request: GenerateRequest,
+        timeout_seconds: int
+    ) -> AsyncIterator[str]:
+        """Попытка генерации с конкретной моделью."""
         try:
-            async with timeout(settings.gemini_stream_timeout_seconds):
+            async with timeout(timeout_seconds):
                 stream = await client.aio.models.generate_content_stream(
-                    model="gemini-2.0-flash",
+                    model=model,
                     contents=build_system_prompt(request),
                     config=types.GenerateContentConfig(
                         temperature=0.9,
@@ -43,11 +56,54 @@ class GeminiService:
                     if chunk.text:
                         yield chunk.text
         except TimeoutError:
-            logger.error(
-                "Gemini generation timed out after %s seconds",
-                settings.gemini_stream_timeout_seconds,
-            )
-            yield "Ошибка генерации: превышено время ожидания ответа модели."
+            raise
         except Exception as e:
-            logger.error(f"Gemini generation error: {e}")
-            yield f"Ошибка генерации: {str(e)}"
+            error_str = str(e)
+            # Проверяем на rate limit ошибки
+            if "429" in error_str or "Too Many Requests" in error_str or "Quota exceeded" in error_str:
+                raise RateLimitError(f"Rate limit for {model}: {error_str}")
+            raise
+
+    @staticmethod
+    async def generate_prompt_stream(request: GenerateRequest) -> AsyncIterator[str]:
+        last_error = None
+        
+        for model in GEMINI_MODELS:
+            try:
+                logger.info(f"Trying model: {model}")
+                chunks = []
+                async for chunk in GeminiService._try_generate_with_model(
+                    model, request, settings.gemini_stream_timeout_seconds
+                ):
+                    chunks.append(chunk)
+                    yield chunk
+                # Если дошли сюда без ошибки — успех
+                logger.info(f"Successfully used model: {model}")
+                return
+            except RateLimitError as e:
+                logger.warning(f"Rate limit hit for {model}: {e}")
+                last_error = e
+                # Пробуем следующую модель
+                continue
+            except TimeoutError:
+                logger.error(
+                    "Gemini generation timed out after %s seconds",
+                    settings.gemini_stream_timeout_seconds,
+                )
+                yield "Ошибка генерации: превышено время ожидания ответа модели."
+                return
+            except Exception as e:
+                logger.error(f"Gemini generation error with {model}: {e}")
+                last_error = e
+                # Для других ошибок тоже пробуем fallback
+                continue
+        
+        # Если все модели исчерпаны
+        error_msg = f"Все модели недоступны. Последняя ошибка: {last_error}"
+        logger.error(error_msg)
+        yield f"Ошибка генерации: квота API исчерпана. Попробуйте через минуту или обратитесь к администратору."
+
+
+class RateLimitError(Exception):
+    """Ошибка превышения квоты API."""
+    pass
