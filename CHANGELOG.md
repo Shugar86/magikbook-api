@@ -1,5 +1,39 @@
 # Changelog
 
+## [2025-03-23] - Frontend Auth UI Fixes
+
+### Исправлено (Frontend)
+
+#### Telegram Login Widget
+- **Новый компонент** `TelegramLoginWidget` — стабильная реализация без конфликта с React DOM:
+  - Использует `useRef` вместо `getElementById` и `innerHTML`
+  - Корректно управляет скриптом через императивный DOM вне React reconciler
+  - Уникальный ID для каждого инстанса виджета
+  - Предотвращает исчезновение кнопки после клика или ререндера
+
+#### Client-Server Auth Consistency
+- **API Route** `/api/prompts/my-uploads` — проксирование с передачей cookie:
+  - Фиксит "Не удалось загрузить промпты" в кабинете
+  - Единый auth flow с SSR (`/cabinet` page)
+
+- **Исправлены типы** `MyUpload.status` → `MyUpload.moderation_status`:
+  - Соответствие фактическому ответу бэкенда `/api/prompts/my-uploads`
+  - Фильтрация и отображение статусов работает корректно
+
+#### Protected Routes
+- **`/submit` page** — добавлен `credentials: 'include'` для auth check
+- **SplashCursor** — `pointer-events: none` для canvas, предотвращает перехват кликов
+
+### Deployment
+```bash
+# Пересобрать и перезапустить фронтенд
+cd /opt/projects/magikbook
+git pull
+docker compose up -d --build magikbook-frontend
+```
+
+---
+
 ## [2025-03-23] - Production Fixes & SSR/Docker Compatibility
 
 ### Исправлено
