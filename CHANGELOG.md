@@ -11,6 +11,22 @@
   - Уникальный ID для каждого инстанса виджета
   - Предотвращает исчезновение кнопки после клика или ререндера
 
+#### Auth Flow Stabilization
+- **Header state management** — сброс состояния при открытии/закрытии модалки:
+  - `handleOpenAuthModal` — единая функция открытия с reset `showTelegramButton`, `loading`, `error`
+  - `handleCloseAuthModal` — единая функция закрытия с полным сбросом состояния
+  - Telegram-вход больше не прячет кнопку навсегда после первого успеха
+
+- **Submit page** — устранён re-auth loop:
+  - Убран client-side redirect на login при `!res.ok` от `/api/auth/me`
+  - Middleware остаётся единственным gatekeeper для `/submit`
+  - Исправлен путь upload: `/api/prompts/upload` → `/api/upload`
+
+- **Cookie propagation** — корректная передача всех Set-Cookie:
+  - Используется `response.headers.getSetCookie()` вместо `get('set-cookie')`
+  - Применено во всех auth route'ах: `login`, `register`, `telegram`
+  - OAuth callbacks (Google/VK) теперь передают все cookie корректно
+
 #### Client-Server Auth Consistency
 - **API Route** `/api/prompts/my-uploads` — проксирование с передачей cookie:
   - Фиксит "Не удалось загрузить промпты" в кабинете
