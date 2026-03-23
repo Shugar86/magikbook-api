@@ -380,7 +380,6 @@ async def google_callback(
     request: Request,
     code: str,
     state: str,
-    response: Response,
     db: AsyncSession = Depends(get_db_session)
 ):
     """
@@ -455,19 +454,8 @@ async def google_callback(
         provider_id_field="google_id"
     )
 
-    # 4. Создаем JWT и устанавливаем cookie
+    # 4. Создаем JWT и устанавливаем cookie на редиректе
     jwt_token = create_access_token(data={"sub": user.id})
-
-    response.set_cookie(
-        key="access_token",
-        value=jwt_token,
-        httponly=True,
-        max_age=settings.access_token_expire_minutes * 60,
-        samesite="lax",
-        secure=True,
-    )
-    # Очищаем state cookie
-    response.delete_cookie(key="oauth_state")
 
     # Редирект на фронтенд
     from fastapi.responses import RedirectResponse as _RedirectResponse
@@ -527,7 +515,6 @@ async def vk_callback(
     request: Request,
     code: str,
     state: str,
-    response: Response,
     db: AsyncSession = Depends(get_db_session)
 ):
     """
@@ -626,19 +613,8 @@ async def vk_callback(
         provider_id_field="vk_id"
     )
 
-    # 4. Создаем JWT и устанавливаем cookie
+    # 4. Создаем JWT и устанавливаем cookie на редиректе
     jwt_token = create_access_token(data={"sub": user.id})
-
-    response.set_cookie(
-        key="access_token",
-        value=jwt_token,
-        httponly=True,
-        max_age=settings.access_token_expire_minutes * 60,
-        samesite="lax",
-        secure=True,
-    )
-    # Очищаем state cookie
-    response.delete_cookie(key="oauth_state")
 
     # Редирект на фронтенд
     from fastapi.responses import RedirectResponse as _RedirectResponse
