@@ -170,6 +170,9 @@ async def get_my_uploads(
                 "ai_model": p.ai_model,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
                 "moderated_at": p.moderated_at.isoformat() if p.moderated_at else None,
+                "likes_count": p.likes_count,
+                "copies": p.copies,
+                "preview_url": p.preview_url,
             }
             for p in prompts
         ],

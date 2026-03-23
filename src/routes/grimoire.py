@@ -51,19 +51,42 @@ async def save_prompt(
 
 @router.get("")
 async def get_grimoire(
+    skip: int = 0,
+    limit: int = 100,
     x_session_token: Optional[str] = Header(default=None, description="Unique user session token"),
     db: AsyncSession = Depends(get_db_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    """
+    Get saved prompts from user's grimoire.
+
+    Args:
+        skip: Number of prompts to skip (for pagination)
+        limit: Maximum number of prompts to return (default 100)
+
+    Returns:
+        dict: List of saved prompts with total count
+    """
     actor = current_user.id if current_user else x_session_token
     if not actor:
         raise HTTPException(status_code=401, detail="Auth or X-Session-Token required")
 
+    # Get total count
+    count_query = select(func.count()).select_from(Prompt).join(SavedPrompt).where(
+        SavedPrompt.session_token == actor
+    )
+    total_count = (await db.scalar(count_query)) or 0
+
+    # Get paginated results
     result = await db.execute(
-        select(Prompt).join(SavedPrompt).where(SavedPrompt.session_token == actor)
+        select(Prompt)
+        .join(SavedPrompt)
+        .where(SavedPrompt.session_token == actor)
+        .offset(skip)
+        .limit(limit)
     )
     prompts = result.scalars().all()
-    
+
     return {
         "prompts": [
             {
@@ -73,8 +96,13 @@ async def get_grimoire(
                 "preview_url": p.preview_url,
                 "media_type": p.media_type,
                 "category": p.category,
+                "likes_count": p.likes_count,
+                "copies": p.copies,
             } for p in prompts
-        ]
+        ],
+        "total": total_count,
+        "skip": skip,
+        "limit": limit,
     }
 
 @router.delete("/{prompt_id}")

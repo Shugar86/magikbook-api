@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
-from src.routes import auth, battle, generate, grimoire, prompts, paywall, test_setup, uploads, moderation, publish
+from src.routes import auth, battle, cabinet, generate, grimoire, prompts, paywall, test_setup, uploads, moderation, publish
 from src.database import init_db
 from src.redis_client import init_redis, close_redis
 from fastapi.staticfiles import StaticFiles
@@ -61,6 +61,7 @@ app.include_router(paywall.router)
 app.include_router(uploads.router)
 app.include_router(moderation.router)
 app.include_router(publish.router)
+app.include_router(cabinet.router)
 
 if settings.environment == "development":
     app.include_router(test_setup.router)

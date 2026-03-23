@@ -168,3 +168,38 @@ class GenerateRequest(BaseModel):
     model: str
     style: str
     input: str
+
+
+class CabinetStats(BaseModel):
+    """User statistics for cabinet overview."""
+
+    saved_count: int
+    submitted_count: int
+    approved_count: int
+    pending_count: int
+    rejected_count: int
+    total_likes: int
+    total_copies: int
+
+
+class CabinetTopPrompt(BaseModel):
+    """User's top performing prompt."""
+
+    id: str
+    title: str
+    likes_count: int
+    copies: int
+
+
+class CabinetUserOut(UserOut):
+    """Extended user info with daily bonus status."""
+
+    can_claim_bonus: bool
+
+
+class CabinetOverview(BaseModel):
+    """Complete cabinet overview response."""
+
+    user: CabinetUserOut
+    stats: CabinetStats
+    top_prompt: Optional[CabinetTopPrompt] = None

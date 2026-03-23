@@ -1,8 +1,21 @@
 # Changelog
 
-## [Unreleased] - OAuth, Upload, Moderation, Publishing
+## [Unreleased] - Cabinet, OAuth, Upload, Moderation, Publishing
 
 ### Добавлено
+
+#### User Cabinet
+- **Endpoint** `GET /api/cabinet/overview` — полная сводка данных пользователя:
+  - Профиль пользователя с флагом `can_claim_bonus` (доступность ежедневного бонуса)
+  - Статистика: saved_count, submitted_count, approved_count, pending_count, rejected_count
+  - Агрегированные метрики: total_likes, total_copies
+  - Лучший промпт пользователя (по количеству лайков)
+- **Новые схемы:** `CabinetOverview`, `CabinetStats`, `CabinetTopPrompt`, `CabinetUserOut`
+- **Роутер** `src/routes/cabinet.py` с зависимостью `get_current_user`
+
+#### Enhanced Existing Endpoints
+- **`GET /api/prompts/my-uploads`** — добавлены поля `likes_count`, `copies`, `preview_url`
+- **`GET /api/grimoire`** — добавлена пагинация (`skip`, `limit`), поля `preview_url`, `likes_count`, `copies`
 
 #### OAuth Integration
 - **Google OAuth** - endpoints `/api/auth/google` и `/api/auth/google/callback`
