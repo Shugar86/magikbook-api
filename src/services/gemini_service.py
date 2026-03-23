@@ -14,10 +14,11 @@ logger = logging.getLogger(__name__)
 client = genai.Client(api_key=settings.google_api_key)
 
 # Модели по приоритету: от быстрой/дешевой к запасным
+# Актуальные модели по результатам проверки (23 марта 2026)
 GEMINI_MODELS = [
-    "gemini-2.5-flash-lite-preview-06-17",  # Новая быстрая и дешевая (2.5 поколение)
-    "gemini-2.5-flash-preview-04-17",       # 2.5 поколение, улучшенная версия
-    "gemini-2.0-flash-lite",                # Базовая дешевая модель (fallback)
+    "gemini-2.5-flash-lite",                # Самая быстрая и дешевая (рекомендуется)
+    "gemini-2.5-flash",                     # Основная модель 2.5 поколения
+    "gemini-2.0-flash-lite",                # Стабильная lite версия 2.0
     "gemini-2.0-flash",                     # Стандартная 2.0
     "gemini-1.5-flash",                     # Запасная предыдущего поколения
 ]
