@@ -173,6 +173,11 @@ class PromptService:
             target_models = []
         target_models_str = json.dumps(target_models) if target_models else None
 
+        # Handle affiliate_links if provided
+        affiliate_links_str = None
+        if payload.affiliate_links:
+            affiliate_links_str = json.dumps(payload.affiliate_links, ensure_ascii=False)
+
         prompt = Prompt(
             title=payload.title.strip() or "Без названия",
             prompt_text=prompt_text,
@@ -184,6 +189,7 @@ class PromptService:
             target_models_str=target_models_str,
             result_example=payload.result_example,
             result_image_url=payload.result_image_url,
+            affiliate_links_str=affiliate_links_str,
         )
         self.db.add(prompt)
         await self.db.commit()

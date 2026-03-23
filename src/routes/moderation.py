@@ -12,9 +12,11 @@ from src.config import settings
 from src.database import get_db_session
 from src.dependencies import get_current_user
 from src.models.db_models import Prompt, User
+from src.models.schemas import AffiliateLinksUpdate
 from src.services.vk_publisher import publish_to_vk, check_vk_config
 from src.services.telegram_publisher import publish_to_telegram, check_telegram_config
 from src.utils.file_storage import delete_file
+import json
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -353,3 +355,30 @@ async def grant_admin_rights(
     target_user.is_admin = True
     await db.commit()
     return {"status": "ok", "user_id": user_id, "is_admin": True}
+
+
+@router.patch("/api/admin/prompts/{prompt_id}/affiliate-links")
+async def update_affiliate_links(
+    prompt_id: str,
+    payload: AffiliateLinksUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Update affiliate links for a prompt (admin only)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    prompt = await db.get(Prompt, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
+
+    # Convert dict to JSON string for storage
+    prompt.affiliate_links_str = json.dumps(payload.affiliate_links, ensure_ascii=False)
+    await db.commit()
+    await db.refresh(prompt)
+
+    return {
+        "status": "ok",
+        "prompt_id": prompt_id,
+        "affiliate_links": payload.affiliate_links,
+    }
