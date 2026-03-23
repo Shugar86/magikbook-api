@@ -70,8 +70,8 @@ async def get_moderation_queue(
     # Получаем общее количество
     from sqlalchemy import func
     count_query = select(func.count()).select_from(Prompt)
-    if status != "all":
-        count_query = count_query.where(Prompt.moderation_status == status)
+    if moderation_status != "all":
+        count_query = count_query.where(Prompt.moderation_status == moderation_status)
 
     total_result = await db.execute(count_query)
     total_count = total_result.scalar_one()
