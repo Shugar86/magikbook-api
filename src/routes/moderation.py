@@ -22,9 +22,7 @@ logger = logging.getLogger(__name__)
 
 def _is_admin(user: User) -> bool:
     """Проверяет является ли пользователь администратором."""
-    # Простая проверка: по умолчанию первые 10 пользователей считаются админами
-    # В продакшене можно добавить поле is_admin в модель User
-    return True  # Разрешаем всем авторизованным для упрощения
+    return user.is_admin
 
 
 @router.get("/api/moderation")
@@ -336,3 +334,22 @@ async def get_moderation_stats(
             "telegram": await check_telegram_config(),
         }
     }
+
+
+@router.post("/api/admin/grant/{user_id}")
+async def grant_admin_rights(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Выдать права администратора пользователю (только для существующих админов)."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    target_user = await db.get(User, user_id)
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    target_user.is_admin = True
+    await db.commit()
+    return {"status": "ok", "user_id": user_id, "is_admin": True}

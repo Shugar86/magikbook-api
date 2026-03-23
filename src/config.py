@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     vk_group_id: str = ""  # с минусом, например "-123456789"
     telegram_channel_id: str = ""  # @channel_username или числовой ID
 
+    # Environment
+    environment: str = "development"  # "development" | "production"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
