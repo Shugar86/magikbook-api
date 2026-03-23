@@ -13,6 +13,12 @@
   ```
   Эти поля были в модели SQLModel, но отсутствовали в SQLite, что вызывало `OperationalError`.
 
+- **Добавлена колонка `is_admin` в `users`** - критичная для авторизации:
+  ```sql
+  ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0;
+  ```
+  Без этой колонки login/register возвращали 500 ошибку.
+
 #### Configuration
 - **FRONTEND_URL** - критически важная переменная для production:
   - OAuth редиректы (Google/VK) теперь корректно возвращают на `https://magikbook.ru`
@@ -31,6 +37,7 @@ docker exec magikbook-api sqlite3 /app/magikbook.db "
 ALTER TABLE prompts ADD COLUMN result_example VARCHAR;
 ALTER TABLE prompts ADD COLUMN result_image_url VARCHAR;
 ALTER TABLE prompts ADD COLUMN affiliate_links_str VARCHAR;
+ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0;
 "
 
 # 2. Обновить .env
