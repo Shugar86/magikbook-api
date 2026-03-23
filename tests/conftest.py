@@ -18,9 +18,9 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def db_session():
-    """Create a fresh database session for the test session."""
+    """Create a fresh database session for each test (function-scoped for isolation)."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
@@ -36,9 +36,9 @@ async def db_session():
     await engine.dispose()
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def client(db_session: AsyncSession):
-    """Create a test client with overridden database dependency (session-scoped)."""
+    """Create a test client with overridden database dependency (function-scoped)."""
     app.dependency_overrides[get_db_session] = lambda: db_session
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

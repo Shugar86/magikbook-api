@@ -167,7 +167,10 @@ class PromptService:
         variables = list(set(re.findall(r"\{([^}]+)\}", prompt_text)))
         variables_str = json.dumps(variables, ensure_ascii=False) if variables else None
 
-        if payload.media_type == "text":
+        # Use user-provided target_models if available, otherwise use defaults
+        if payload.target_models is not None:
+            target_models = payload.target_models
+        elif payload.media_type == "text":
             target_models = ["ChatGPT", "Claude"]
         else:
             target_models = []
