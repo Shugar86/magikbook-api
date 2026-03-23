@@ -180,15 +180,20 @@ async def claim_daily_bonus(
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     key = f"daily_bonus:{current_user.id}:{today}"
 
-    if redis:
-        already_claimed = await redis.get(key)
-        if already_claimed:
-            raise HTTPException(
-                status_code=400,
-                detail="Ежедневный бонус уже получен сегодня. Возвращайся завтра!"
-            )
-        await redis.incr(key)
-        await redis.expire(key, 86400)
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Бонусная система временно недоступна. Попробуй позже."
+        )
+
+    already_claimed = await redis.get(key)
+    if already_claimed:
+        raise HTTPException(
+            status_code=400,
+            detail="Ежедневный бонус уже получен сегодня. Возвращайся завтра!"
+        )
+    await redis.incr(key)
+    await redis.expire(key, 86400)
 
     bonus = 5
     current_user.tokens += bonus
@@ -464,14 +469,19 @@ async def google_callback(
     # Очищаем state cookie
     response.delete_cookie(key="oauth_state")
 
-    return {
-        "access_token": jwt_token,
-        "token_type": "bearer",
-        "user_id": user.id,
-        "email": user.email or "",
-        "username": user.username,
-        "tokens": user.tokens,
-    }
+    # Редирект на фронтенд
+    from fastapi.responses import RedirectResponse as _RedirectResponse
+    redirect = _RedirectResponse(url=settings.frontend_url or "/")
+    redirect.set_cookie(
+        key="access_token",
+        value=jwt_token,
+        httponly=True,
+        max_age=settings.access_token_expire_minutes * 60,
+        samesite="lax",
+        secure=True,
+    )
+    redirect.delete_cookie(key="oauth_state")
+    return redirect
 
 
 # ============================================================================
@@ -630,14 +640,19 @@ async def vk_callback(
     # Очищаем state cookie
     response.delete_cookie(key="oauth_state")
 
-    return {
-        "access_token": jwt_token,
-        "token_type": "bearer",
-        "user_id": user.id,
-        "email": user.email or "",
-        "username": user.username,
-        "tokens": user.tokens,
-    }
+    # Редирект на фронтенд
+    from fastapi.responses import RedirectResponse as _RedirectResponse
+    redirect = _RedirectResponse(url=settings.frontend_url or "/")
+    redirect.set_cookie(
+        key="access_token",
+        value=jwt_token,
+        httponly=True,
+        max_age=settings.access_token_expire_minutes * 60,
+        samesite="lax",
+        secure=True,
+    )
+    redirect.delete_cookie(key="oauth_state")
+    return redirect
 
 
 # ============================================================================
