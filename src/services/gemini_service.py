@@ -15,9 +15,11 @@ client = genai.Client(api_key=settings.google_api_key)
 
 # Модели по приоритету: от быстрой/дешевой к запасным
 GEMINI_MODELS = [
-    "gemini-2.0-flash-lite",  # Самая быстрая и дешевая
-    "gemini-2.0-flash",       # Стандартная
-    "gemini-1.5-flash",       # Запасная предыдущего поколения
+    "gemini-2.5-flash-lite-preview-06-17",  # Новая быстрая и дешевая (2.5 поколение)
+    "gemini-2.5-flash-preview-04-17",       # 2.5 поколение, улучшенная версия
+    "gemini-2.0-flash-lite",                # Базовая дешевая модель (fallback)
+    "gemini-2.0-flash",                     # Стандартная 2.0
+    "gemini-1.5-flash",                     # Запасная предыдущего поколения
 ]
 
 
@@ -58,10 +60,14 @@ class GeminiService:
         except TimeoutError:
             raise
         except Exception as e:
-            error_str = str(e)
+            error_str = str(e).lower()
             # Проверяем на rate limit ошибки
-            if "429" in error_str or "Too Many Requests" in error_str or "Quota exceeded" in error_str:
-                raise RateLimitError(f"Rate limit for {model}: {error_str}")
+            if "429" in error_str or "too many requests" in error_str or "quota exceeded" in error_str:
+                raise RateLimitError(f"Rate limit for {model}: {e}")
+            # Модель не найдена или недоступна - тоже пробуем следующую
+            if "not found" in error_str or "not supported" in error_str or "invalid model" in error_str:
+                logger.warning(f"Model {model} not available: {e}")
+                raise RateLimitError(f"Model not available {model}: {e}")
             raise
 
     @staticmethod
