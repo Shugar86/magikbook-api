@@ -1,32 +1,33 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.dependencies import get_optional_user
+from src.dependencies import get_current_user
 from src.database import get_db_session
 from src.models.db_models import Prompt, SavedPrompt, User
 
 router = APIRouter(prefix="/api/grimoire")
 logger = logging.getLogger(__name__)
 
+
 class SavePromptRequest(BaseModel):
     prompt_id: str
+
 
 @router.post("")
 async def save_prompt(
     request: SavePromptRequest,
-    x_session_token: Optional[str] = Header(default=None, description="Unique user session token"),
     db: AsyncSession = Depends(get_db_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
-    actor = current_user.id if current_user else x_session_token
-    if not actor:
-        raise HTTPException(status_code=401, detail="Auth or X-Session-Token required")
-
+    """
+    Save a prompt to user's grimoire.
+    Requires authentication.
+    """
     # Check if prompt exists
     prompt = await db.get(Prompt, request.prompt_id)
     if not prompt:
@@ -35,30 +36,31 @@ async def save_prompt(
     # Check if already saved
     result = await db.execute(
         select(SavedPrompt).where(
-            SavedPrompt.session_token == actor,
-            SavedPrompt.prompt_id == request.prompt_id
+            SavedPrompt.user_id == current_user.id,
+            SavedPrompt.prompt_id == request.prompt_id,
         )
     )
     existing_save = result.scalar_one_or_none()
     if existing_save:
         return {"status": "ok", "message": "Already saved"}
 
-    # Save
-    new_save = SavedPrompt(session_token=actor, prompt_id=request.prompt_id)
+    # Save using user_id
+    new_save = SavedPrompt(user_id=current_user.id, prompt_id=request.prompt_id)
     db.add(new_save)
     await db.commit()
     return {"status": "ok", "message": "Prompt saved"}
+
 
 @router.get("")
 async def get_grimoire(
     skip: int = 0,
     limit: int = 100,
-    x_session_token: Optional[str] = Header(default=None, description="Unique user session token"),
     db: AsyncSession = Depends(get_db_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Get saved prompts from user's grimoire.
+    Requires authentication.
 
     Args:
         skip: Number of prompts to skip (for pagination)
@@ -67,21 +69,17 @@ async def get_grimoire(
     Returns:
         dict: List of saved prompts with total count
     """
-    actor = current_user.id if current_user else x_session_token
-    if not actor:
-        raise HTTPException(status_code=401, detail="Auth or X-Session-Token required")
-
-    # Get total count
-    count_query = select(func.count()).select_from(Prompt).join(SavedPrompt).where(
-        SavedPrompt.session_token == actor
+    # Get total count by user_id
+    count_query = select(func.count()).select_from(SavedPrompt).where(
+        SavedPrompt.user_id == current_user.id
     )
     total_count = (await db.scalar(count_query)) or 0
 
-    # Get paginated results
+    # Get paginated results by user_id
     result = await db.execute(
         select(Prompt)
         .join(SavedPrompt)
-        .where(SavedPrompt.session_token == actor)
+        .where(SavedPrompt.user_id == current_user.id)
         .offset(skip)
         .limit(limit)
     )
@@ -105,20 +103,20 @@ async def get_grimoire(
         "limit": limit,
     }
 
+
 @router.delete("/{prompt_id}")
 async def remove_from_grimoire(
     prompt_id: str,
-    x_session_token: Optional[str] = Header(default=None),
     db: AsyncSession = Depends(get_db_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
-    actor = current_user.id if current_user else x_session_token
-    if not actor:
-        raise HTTPException(status_code=401, detail="Auth or X-Session-Token required")
-
+    """
+    Remove a prompt from user's grimoire.
+    Requires authentication.
+    """
     result = await db.execute(
         select(SavedPrompt).where(
-            SavedPrompt.session_token == actor,
+            SavedPrompt.user_id == current_user.id,
             SavedPrompt.prompt_id == prompt_id,
         )
     )
@@ -129,4 +127,3 @@ async def remove_from_grimoire(
     await db.delete(saved)
     await db.commit()
     return {"status": "ok", "message": "Removed from grimoire"}
-

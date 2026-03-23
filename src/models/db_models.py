@@ -82,15 +82,18 @@ class Prompt(PromptBase, table=True):
 
 class SavedPrompt(SQLModel, table=True):
     __tablename__ = "saved_prompts"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
-    session_token: str = Field(index=True)
+    user_id: str = Field(foreign_key="users.id", index=True)
     prompt_id: str = Field(foreign_key="prompts.id")
+
+    __table_args__ = (UniqueConstraint("user_id", "prompt_id", name="uq_saved_user_prompt"),)
 
 class Like(SQLModel, table=True):
     __tablename__ = "likes"
+
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_session: str = Field(index=True)  # session_token или user_id
+    user_id: str = Field(foreign_key="users.id", index=True)
     prompt_id: str = Field(foreign_key="prompts.id")
-    
-    __table_args__ = (UniqueConstraint("user_session", "prompt_id", name="uq_like_user_prompt"),)
+
+    __table_args__ = (UniqueConstraint("user_id", "prompt_id", name="uq_like_user_prompt"),)

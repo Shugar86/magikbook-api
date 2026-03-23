@@ -81,16 +81,59 @@ async def publish_prompt(
 async def like_prompt(
     prompt_id: str,
     request: Request,
-    x_session_token: Optional[str] = Header(default=None),
-    current_user: Optional[User] = Depends(get_optional_user),
-    svc: PromptService = Depends(_service),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    """Like a prompt."""
-    actor = current_user.id if current_user else x_session_token
-    if not actor:
-        raise HTTPException(status_code=401, detail="Auth or X-Session-Token required")
-    client_ip = request.client.host if request.client else "unknown"
-    return await svc.like(prompt_id, actor, client_ip)
+    """
+    Toggle like on a prompt. Requires authentication.
+    If already liked - removes like (unlike). If not liked - adds like.
+    """
+    from sqlalchemy import select
+    from src.models.db_models import Like, Prompt
+    from src.redis_client import get_redis
+
+    # Rate limiting
+    redis = get_redis()
+    if redis:
+        client_ip = request.client.host if request.client else "unknown"
+        rl_key = f"like:rate_limit:{current_user.id}:{client_ip}"
+        acquired = await redis.set(rl_key, "1", ex=2, nx=True)
+        if not acquired:
+            raise HTTPException(status_code=429, detail="Too Many Requests")
+
+    # Get prompt
+    prompt = await db.get(Prompt, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    # Check if already liked
+    existing = await db.execute(
+        select(Like).where(
+            Like.user_id == current_user.id,
+            Like.prompt_id == prompt_id,
+        )
+    )
+    liked = existing.scalar_one_or_none()
+
+    if liked:
+        # Unlike: remove like and decrement count
+        await db.delete(liked)
+        prompt.likes_count = max(0, prompt.likes_count - 1)
+        is_liked = False
+    else:
+        # Like: add like and increment count
+        db.add(Like(user_id=current_user.id, prompt_id=prompt_id))
+        prompt.likes_count += 1
+        is_liked = True
+
+    await db.commit()
+    await db.refresh(prompt)
+
+    return LikeResponse(
+        status="ok",
+        likes_count=prompt.likes_count,
+        message="Liked" if is_liked else "Unliked",
+    )
 
 
 @router.post("/{prompt_id}/copy-count")

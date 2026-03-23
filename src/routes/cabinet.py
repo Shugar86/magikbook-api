@@ -44,9 +44,9 @@ async def get_cabinet_overview(
         # If Redis is unavailable, assume bonus can be claimed
         can_claim_bonus = True
 
-    # Get saved prompts count
+    # Get saved prompts count by user_id
     saved_count_query = select(func.count()).select_from(SavedPrompt).where(
-        SavedPrompt.session_token == current_user.id
+        SavedPrompt.user_id == current_user.id
     )
     saved_count = (await db.scalar(saved_count_query)) or 0
 
