@@ -2,10 +2,13 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 import src.redis_client as redis_client
 from src.database import get_db_session
 from src.services.battle_service import BattleService
+from src.dependencies import get_current_user, get_optional_user
+from src.models.db_models import User, Prompt
 
 router = APIRouter(prefix="/api/battle")
 logger = logging.getLogger(__name__)
@@ -74,8 +77,13 @@ async def vote_battle(
     payload: VoteRequest,
     request: Request,
     svc: BattleService = Depends(_service),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    """Record a battle vote and update ELO ratings."""
+    """Record a battle vote and update ELO ratings.
+    
+    Requires authentication OR session token to prevent duplicate votes.
+    Returns real vote percentages based on all votes in database.
+    """
     redis = redis_client.get_redis()
     if redis:
         client_ip = request.client.host if request.client else "unknown"
@@ -83,4 +91,49 @@ async def vote_battle(
         acquired = await redis.set(rl_key, "1", ex=2, nx=True)
         if not acquired:
             raise HTTPException(status_code=429, detail="Too Many Requests")
-    return await svc.record_vote(payload.winner_id, payload.loser_id)
+
+    # Get session token from header for anonymous users
+    session_token = request.headers.get("x-session-token")
+    
+    # Require either user auth or session token
+    if not current_user and not session_token:
+        raise HTTPException(
+            status_code=401, 
+            detail="Authentication required. Please log in or provide session token."
+        )
+
+    user_id = current_user.id if current_user else None
+
+    try:
+        result = await svc.record_vote(
+            payload.winner_id, 
+            payload.loser_id, 
+            user_id=user_id, 
+            session_token=session_token
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error recording battle vote: {e}")
+        raise HTTPException(status_code=500, detail="Failed to record vote")
+
+
+@router.get("/stats/{prompt_id}")
+async def get_battle_stats(
+    prompt_id: str,
+    svc: BattleService = Depends(_service),
+):
+    """Get battle statistics for a specific prompt."""
+    win_pct, total_votes = await svc.get_vote_percentages(prompt_id)
+    
+    prompt = await svc.db.get(Prompt, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    return {
+        "prompt_id": prompt_id,
+        "win_percentage": win_pct,
+        "total_votes": total_votes,
+        "elo_rating": prompt.elo_rating,
+    }
