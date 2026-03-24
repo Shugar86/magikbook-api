@@ -97,3 +97,19 @@ class Like(SQLModel, table=True):
     prompt_id: str = Field(foreign_key="prompts.id")
 
     __table_args__ = (UniqueConstraint("user_id", "prompt_id", name="uq_like_user_prompt"),)
+
+
+class BattleVote(SQLModel, table=True):
+    __tablename__ = "battle_votes"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[str] = Field(default=None, foreign_key="users.id", index=True)
+    session_token: Optional[str] = Field(default=None, index=True)  # For anonymous users
+    winner_id: str = Field(foreign_key="prompts.id", index=True)
+    loser_id: str = Field(foreign_key="prompts.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "winner_id", "loser_id", name="uq_battle_vote_user_pair"),
+        UniqueConstraint("session_token", "winner_id", "loser_id", name="uq_battle_vote_session_pair"),
+    )
