@@ -1,8 +1,18 @@
 # Changelog
 
-## [2025-03-23] - Gemini API Rate Limit Fix & Auth Stabilization
+## [2025-03-23] - Like System & Gemini API Fix
 
 ### Исправлено (Backend)
+
+#### Like System
+- **GET /api/prompts/{id}/like** — новый endpoint для проверки статуса лайка:
+  - Возвращает `{liked: true/false, likes_count: number}`
+  - Позволяет UI отображать актуальный статус лайка при загрузке
+  
+- **POST /api/prompts/{id}/like** — toggle like (уже существовал):
+  - Добавляет или убирает лайк
+  - Возвращает обновленное количество лайков
+  - Сохраняет в базе данных с привязкой к пользователю
 
 #### Gemini Service
 - **Мульти-модельный fallback** — автоматический переключение при rate limit:
