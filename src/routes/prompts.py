@@ -136,6 +136,39 @@ async def like_prompt(
     )
 
 
+@router.get("/{prompt_id}/like", response_model=dict)
+async def get_like_status(
+    prompt_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Check if current user has liked this prompt.
+    Returns {liked: true/false, likes_count: number}
+    """
+    from sqlalchemy import select, func
+    from src.models.db_models import Like, Prompt
+
+    # Get prompt with likes count
+    prompt = await db.get(Prompt, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    # Check if user liked this prompt
+    existing = await db.execute(
+        select(Like).where(
+            Like.user_id == current_user.id,
+            Like.prompt_id == prompt_id,
+        )
+    )
+    liked = existing.scalar_one_or_none()
+
+    return {
+        "liked": bool(liked),
+        "likes_count": prompt.likes_count,
+    }
+
+
 @router.post("/{prompt_id}/copy-count")
 async def increment_copy_count(
     prompt_id: str,
