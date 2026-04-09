@@ -7,13 +7,15 @@ from fastapi.responses import RedirectResponse
 from jose import jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field, EmailStr
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
+import aiosmtplib
+from email.message import EmailMessage
 
 from src.config import settings
 from src.database import get_db_session
-from src.models.db_models import User
+from src.models.db_models import EmailOTP, User
 from src.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/auth")
@@ -38,6 +40,21 @@ class Token(BaseModel):
     email: str
     username: str
     tokens: int
+
+
+class SendOTPBody(BaseModel):
+    email: EmailStr
+
+
+class SendOTPResponse(BaseModel):
+    status: str
+    message: str
+
+
+class VerifyOTPBody(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+    username: Optional[str] = Field(default=None, max_length=50)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -122,7 +139,11 @@ async def login(
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     
-    if not user or not pwd_context.verify(payload.password, user.hashed_password):
+    if (
+        not user
+        or not user.hashed_password
+        or not pwd_context.verify(payload.password, user.hashed_password)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -149,6 +170,144 @@ async def login(
         "username": user.username,
         "tokens": user.tokens
     }
+
+async def _send_otp_email(to_email: str, code: str) -> None:
+    if not settings.smtp_user or not settings.smtp_password:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Отправка почты временно недоступна (SMTP не настроен).",
+        )
+    msg = EmailMessage()
+    msg["Subject"] = f"Ваш код входа в MagikBook: {code}"
+    msg["From"] = settings.smtp_from or settings.smtp_user
+    msg["To"] = to_email
+    msg.set_content(f"Ваш код: {code}. Действует 10 минут.")
+    msg.add_alternative(
+        f"<p>Ваш код: <b>{code}</b>. Действует 10 минут.</p>",
+        subtype="html",
+    )
+    await aiosmtplib.send(
+        msg,
+        hostname=settings.smtp_host,
+        port=settings.smtp_port,
+        username=settings.smtp_user,
+        password=settings.smtp_password,
+        use_tls=settings.smtp_port == 465,
+    )
+
+
+@router.post("/send-otp", response_model=SendOTPResponse)
+async def send_otp(body: SendOTPBody, db: AsyncSession = Depends(get_db_session)):
+    from src.redis_client import get_redis
+
+    email_norm = body.email.lower()
+    redis = get_redis()
+    rate_key = f"otp_rate:{email_norm}"
+    if redis:
+        if await redis.get(rate_key):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Подождите минуту перед повторной отправкой кода.",
+            )
+    await db.execute(delete(EmailOTP).where(EmailOTP.email == email_norm))
+    await db.commit()
+
+    code = f"{secrets.randbelow(900000) + 100000:d}"
+    row = EmailOTP(email=email_norm, code=code)
+    db.add(row)
+    await db.commit()
+
+    try:
+        await _send_otp_email(email_norm, code)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Не удалось отправить письмо. Попробуйте позже.",
+        ) from exc
+
+    if redis:
+        await redis.set(rate_key, "1", ex=60)
+
+    return SendOTPResponse(
+        status="sent",
+        message=f"Код отправлен на {email_norm}",
+    )
+
+
+@router.post("/verify-otp", response_model=Token)
+async def verify_otp(
+    body: VerifyOTPBody,
+    response: Response,
+    db: AsyncSession = Depends(get_db_session),
+):
+    email_norm = body.email.lower()
+    code_digits = "".join(c for c in body.code if c.isdigit())
+    if len(code_digits) != 6:
+        raise HTTPException(status_code=400, detail="Код неверный или истёк")
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=10)
+    result = await db.execute(
+        select(EmailOTP)
+        .where(
+            EmailOTP.email == email_norm,
+            EmailOTP.used == False,  # noqa: E712
+        )
+        .order_by(EmailOTP.created_at.desc())
+        .limit(1)
+    )
+    otp_row = result.scalar_one_or_none()
+    if not otp_row:
+        raise HTTPException(status_code=400, detail="Код неверный или истёк")
+    created = otp_row.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if created < cutoff or otp_row.code != code_digits:
+        raise HTTPException(status_code=400, detail="Код неверный или истёк")
+
+    otp_row.used = True
+    db.add(otp_row)
+
+    ures = await db.execute(select(User).where(User.email == email_norm))
+    user = ures.scalar_one_or_none()
+    if user:
+        pass
+    else:
+        uname = (body.username or "").strip() or email_norm.split("@")[0]
+        if len(uname) < 2:
+            uname = email_norm.split("@")[0] or "user"
+        user = User(
+            email=email_norm,
+            username=uname[:50],
+            hashed_password=None,
+            tokens=10,
+            auth_provider="email",
+        )
+        db.add(user)
+
+    await db.commit()
+    await db.refresh(user)
+
+    access_token = create_access_token(data={"sub": user.id})
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        max_age=settings.access_token_expire_minutes * 60,
+        samesite="lax",
+        secure=True,
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "email": user.email or "",
+        "username": user.username,
+        "tokens": user.tokens,
+    }
+
 
 @router.post("/logout")
 async def logout(response: Response):

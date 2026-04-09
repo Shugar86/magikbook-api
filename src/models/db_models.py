@@ -28,6 +28,16 @@ class PromptBase(SQLModel):
             return []
         return json.loads(self.target_models_str)
 
+class EmailOTP(SQLModel, table=True):
+    __tablename__ = "email_otps"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(index=True)
+    code: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    used: bool = Field(default=False)
+
+
 class User(SQLModel, table=True):
     __tablename__ = "users"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)

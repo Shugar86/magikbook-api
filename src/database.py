@@ -18,7 +18,7 @@ async def get_db_session() -> AsyncSession:
         yield session
 
 async def init_db():
-    from src.models.db_models import Like, Prompt, SavedPrompt, User
+    from src.models.db_models import EmailOTP, Like, Prompt, SavedPrompt, User
     from sqlmodel import SQLModel
     
     async with engine.begin() as conn:
