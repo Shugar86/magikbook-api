@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -61,6 +61,10 @@ FALLBACK_VOTE_IDS = frozenset(p["id"] for p in FALLBACK_PROMPTS)
 class VoteRequest(BaseModel):
     winner_id: str
     loser_id: str
+    session_token: Optional[str] = Field(
+        default=None,
+        description="Анонимная сессия, если заголовок X-Session-Token срезан прокси.",
+    )
 
 
 def _service(db: AsyncSession = Depends(get_db_session)) -> BattleService:
@@ -103,9 +107,10 @@ async def vote_battle(
                 headers={"Retry-After": str(BATTLE_VOTE_RATE_LIMIT_SEC)},
             )
 
-    # Get session token from header for anonymous users
-    session_token = request.headers.get("x-session-token")
-    
+    header_tok = (request.headers.get("x-session-token") or "").strip()
+    body_tok = (payload.session_token or "").strip()
+    session_token = header_tok or body_tok or None
+
     # Require either user auth or session token
     if not current_user and not session_token:
         raise HTTPException(
