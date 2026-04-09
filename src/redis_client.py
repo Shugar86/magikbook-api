@@ -43,10 +43,23 @@ class _InMemoryRedis:
             return None
         return self._store.get(key)
 
-    async def set(self, key: str, value: Any, ex: int | None = None) -> bool:
+    async def set(
+        self,
+        key: str,
+        value: Any,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> bool | None:
+        """Match redis.asyncio SET: NX returns None if key already exists (and not expired)."""
+        self._is_expired(key)
+        exists = key in self._store
+        if nx and exists:
+            return None
         self._store[key] = value
-        if ex:
+        if ex is not None:
             self._expires[key] = time.time() + ex
+        else:
+            self._expires.pop(key, None)
         return True
 
     async def setex(self, key: str, seconds: int, value: Any) -> bool:

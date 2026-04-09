@@ -2,6 +2,7 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from src.main import app
+from src.routes.battle import BATTLE_VOTE_RATE_LIMIT_SEC
 
 
 @pytest.mark.asyncio
@@ -49,3 +50,37 @@ async def test_vote_nonexistent_prompts_returns_404_or_429(client: AsyncClient):
         json={"winner_id": "fake-winner-id", "loser_id": "fake-loser-id"},
     )
     assert resp.status_code in (404, 429)
+
+
+@pytest.mark.asyncio
+async def test_vote_rate_limit_second_request_429(client: AsyncClient, monkeypatch):
+    """When Redis rate-limit slot is taken, return 429 with Retry-After."""
+
+    class BusyRedis:
+        _first = True
+
+        async def set(self, key, value, ex=None, nx=None):
+            if self._first:
+                self._first = False
+                return True
+            return False
+
+    import src.redis_client
+
+    monkeypatch.setattr(src.redis_client, "get_redis", lambda: BusyRedis())
+
+    headers = {"X-Session-Token": "test-session-rl"}
+    r1 = await client.post(
+        "/api/battle/vote",
+        json={"winner_id": "a", "loser_id": "b"},
+        headers=headers,
+    )
+    r2 = await client.post(
+        "/api/battle/vote",
+        json={"winner_id": "a", "loser_id": "b"},
+        headers=headers,
+    )
+
+    assert r1.status_code != 429
+    assert r2.status_code == 429
+    assert r2.headers.get("retry-after") == str(BATTLE_VOTE_RATE_LIMIT_SEC)
