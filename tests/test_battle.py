@@ -17,10 +17,14 @@ async def test_vote_success(monkeypatch):
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/api/battle/vote", json={
-            "winner_id": "1",
-            "loser_id": "2"
-        })
+        response = await client.post(
+            "/api/battle/vote",
+            json={
+                "winner_id": "1",
+                "loser_id": "2",
+                "session_token": "test-session-vote-success",
+            },
+        )
         # With new BattleService, it will try to get prompts from DB and return 404
         # since they don't exist (in-memory DB for this test)
         assert response.status_code in [404, 200, 429]
@@ -47,7 +51,11 @@ async def test_vote_nonexistent_prompts_returns_404_or_429(client: AsyncClient):
     """Voting for non-existent prompts should return 404 or 429."""
     resp = await client.post(
         "/api/battle/vote",
-        json={"winner_id": "fake-winner-id", "loser_id": "fake-loser-id"},
+        json={
+            "winner_id": "fake-winner-id",
+            "loser_id": "fake-loser-id",
+            "session_token": "test-session-fake-pair",
+        },
     )
     assert resp.status_code in (404, 429)
 
