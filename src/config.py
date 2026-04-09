@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     # Environment
     environment: str = "development"  # "development" | "production"
 
+    # SMTP (email OTP)
+    smtp_host: str = "smtp.yandex.ru"
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@magikbook.ru"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
