@@ -11,7 +11,18 @@ from src.models.schemas import GenerateRequest
 
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=settings.google_api_key)
+_genai_client: genai.Client | None = None
+
+
+def _get_genai_client() -> genai.Client:
+    """Lazily build Gemini client so API can start without GOOGLE_API_KEY."""
+    global _genai_client
+    key = (settings.google_api_key or "").strip()
+    if not key:
+        raise RuntimeError("GOOGLE_API_KEY is not configured")
+    if _genai_client is None:
+        _genai_client = genai.Client(api_key=key)
+    return _genai_client
 
 # Модели по приоритету: от быстрой/дешевой к запасным
 # Актуальные модели по результатам проверки (23 марта 2026)
@@ -46,8 +57,9 @@ class GeminiService:
     ) -> AsyncIterator[str]:
         """Попытка генерации с конкретной моделью."""
         try:
+            genai_client = _get_genai_client()
             async with timeout(timeout_seconds):
-                stream = await client.aio.models.generate_content_stream(
+                stream = await genai_client.aio.models.generate_content_stream(
                     model=model,
                     contents=build_system_prompt(request),
                     config=types.GenerateContentConfig(

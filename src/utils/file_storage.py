@@ -220,5 +220,33 @@ def file_exists(file_path: str) -> bool:
     return Path(file_path).exists() if file_path else False
 
 
+def file_path_to_public_upload_url(file_path: str) -> Optional[str]:
+    """
+    Строит URL вида /uploads/... для раздачи через StaticFiles (корень каталога uploads).
+
+    Args:
+        file_path: Абсолютный или относительный путь к файлу внутри дерева uploads.
+
+    Returns:
+        Публичный путь или None, если не удалось вывести из пути.
+    """
+    if not file_path:
+        return None
+    try:
+        resolved = Path(file_path).resolve()
+        parts = resolved.parts
+        for i, part in enumerate(parts):
+            if part == "uploads" and i + 1 < len(parts):
+                rel = "/".join(parts[i + 1:])
+                return f"/uploads/{rel}"
+    except (OSError, ValueError):
+        pass
+    norm = str(file_path).replace("\\", "/")
+    if "uploads/" in norm:
+        sub = norm.split("uploads/", 1)[1].lstrip("/")
+        return f"/uploads/{sub}"
+    return None
+
+
 # Import io здесь чтобы избежать circular import при использовании в validate_file
 import io  # noqa: E402

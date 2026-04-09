@@ -1,8 +1,13 @@
+from typing import Optional
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    google_api_key: str
+    """Application settings. Use ENVIRONMENT=production for secure cookies by default."""
+
+    google_api_key: str = ""
     telegram_bot_token: str = ""
     database_url: str = "sqlite+aiosqlite:///./magikbook.db"
     redis_url: str = ""
@@ -32,17 +37,29 @@ class Settings(BaseSettings):
     vk_group_id: str = ""  # с минусом, например "-123456789"
     telegram_channel_id: str = ""  # @channel_username или числовой ID
 
-    # Environment
-    environment: str = "development"  # "development" | "production"
+    # Environment ("production" enables Secure cookies unless COOKIE_SECURE overrides)
+    environment: str = "development"
 
-    # SMTP (email OTP)
+    # If set, overrides auto secure cookies (True/False). None = secure only in production.
+    cookie_secure: Optional[bool] = Field(default=None)
+
+    # SMTP (email OTP) — на многих VPS исходящий SMTP (465/587) заблокирован
     smtp_host: str = "smtp.yandex.ru"
     smtp_port: int = 465
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = "noreply@magikbook.ru"
+    # Если задан — отправка OTP через Resend HTTPS API (порт 443). Иначе при SMTP_HOST=smtp.resend.com
+    # используется SMTP_PASSWORD как API key и тот же API.
+    resend_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    def cookie_secure_effective(self) -> bool:
+        """HttpOnly session cookies: Secure flag for HTTPS production."""
+        if self.cookie_secure is not None:
+            return self.cookie_secure
+        return self.environment.lower() == "production"
 
 
 settings = Settings()

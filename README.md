@@ -2,6 +2,8 @@
 
 Backend API для MagikBook - платформы для генерации и обмена AI промптами.
 
+Чеклист продакшена (env, миграции, SMTP): в репозитории фронтенда файл `docs/PRODUCTION.md`, либо см. `.env.example` здесь.
+
 ## Возможности
 
 - **OAuth Аутентификация** - Google, VK ID, Telegram
