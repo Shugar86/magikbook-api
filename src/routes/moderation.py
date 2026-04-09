@@ -1,10 +1,13 @@
 """API endpoints for content moderation."""
 
-from datetime import datetime
-from typing import Optional
 import logging
+import mimetypes
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +18,12 @@ from src.models.db_models import Prompt, User
 from src.models.schemas import AffiliateLinksUpdate
 from src.services.vk_publisher import publish_to_vk, check_vk_config
 from src.services.telegram_publisher import publish_to_telegram, check_telegram_config
-from src.utils.file_storage import delete_file
+from src.utils.file_storage import (
+    delete_file,
+    file_exists,
+    file_path_to_public_upload_url,
+    get_upload_dir,
+)
 import json
 
 router = APIRouter()
@@ -101,6 +109,48 @@ async def get_moderation_queue(
     }
 
 
+def _resolve_moderation_upload_file(filename: str) -> Optional[Path]:
+    """Resolve a basename under uploads/temp/pending or uploads/temp/approved (no path traversal)."""
+    if not filename or ".." in filename or "/" in filename or "\\" in filename:
+        return None
+    safe = Path(filename).name
+    if not safe:
+        return None
+    base = get_upload_dir().resolve()
+    for sub in ("pending", "approved"):
+        sub_dir = (base / sub).resolve()
+        candidate = (sub_dir / safe).resolve()
+        try:
+            candidate.relative_to(sub_dir)
+        except ValueError:
+            continue
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+@router.get("/api/moderation/files/{filename}")
+async def get_moderation_file(
+    filename: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Отдать файл превью для модерации (только админ)."""
+    if not _is_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+    path = _resolve_moderation_upload_file(filename)
+    if not path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    media_type, _ = mimetypes.guess_type(str(path))
+    return FileResponse(
+        path,
+        filename=path.name,
+        media_type=media_type or "application/octet-stream",
+    )
+
+
 @router.post("/api/moderation/{prompt_id}/approve")
 async def approve_prompt(
     prompt_id: str,
@@ -136,81 +186,95 @@ async def approve_prompt(
             detail=f"Cannot approve prompt with status: {prompt.moderation_status}"
         )
 
-    # Обновляем статус на "approved"
-    prompt.moderation_status = "approved"
     prompt.moderated_by = current_user.id
     prompt.moderated_at = datetime.utcnow()
+    prompt.moderation_status = "published"
 
     await db.commit()
+    await db.refresh(prompt)
 
-    # Результаты публикации
     vk_result = None
     telegram_result = None
-    errors = []
+    errors: list[str] = []
+    file_path_snapshot = prompt.file_path
 
-    # Автопостинг в VK (только для image с файлом)
-    if prompt.media_type == "image" and prompt.file_path:
+    # Публикация в VK/TG не влияет на статус (уже published)
+    if prompt.media_type == "image" and file_path_snapshot:
         try:
             if await check_vk_config():
                 vk_result = await publish_to_vk(
                     title=prompt.title,
                     prompt_text=prompt.prompt_text,
                     ai_model=prompt.ai_model,
-                    file_path=prompt.file_path,
-                    prompt_id=prompt.id
+                    file_path=file_path_snapshot,
+                    prompt_id=prompt.id,
                 )
                 prompt.vk_post_url = vk_result.get("post_url")
-                prompt.preview_url = vk_result.get("photo_url")  # URL из VK для превью
-                logger.info(f"Published to VK: {vk_result.get('post_url')}")
+                prompt.preview_url = vk_result.get("photo_url")
+                logger.info("Published to VK: %s", vk_result.get("post_url"))
             else:
                 errors.append("VK not configured")
                 logger.warning("VK publishing skipped - not configured")
         except Exception as e:
-            error_msg = f"VK publishing failed: {str(e)}"
+            error_msg = f"VK publishing failed: {e}"
             errors.append(error_msg)
             logger.error(error_msg)
 
-    # Автопостинг в Telegram
-    if prompt.file_path and prompt.media_type in ("image", "video"):
+    if file_path_snapshot and prompt.media_type in ("image", "video"):
         try:
             if await check_telegram_config():
                 telegram_result = await publish_to_telegram(
                     title=prompt.title,
                     prompt_text=prompt.prompt_text,
                     ai_model=prompt.ai_model,
-                    file_path=prompt.file_path,
+                    file_path=file_path_snapshot,
                     media_type=prompt.media_type,
-                    prompt_id=prompt.id
+                    prompt_id=prompt.id,
                 )
                 prompt.telegram_message_url = telegram_result.get("message_url")
-                logger.info(f"Published to Telegram: {telegram_result.get('message_url')}")
+                logger.info("Published to Telegram: %s", telegram_result.get("message_url"))
             else:
                 errors.append("Telegram not configured")
                 logger.warning("Telegram publishing skipped - not configured")
         except Exception as e:
-            error_msg = f"Telegram publishing failed: {str(e)}"
+            error_msg = f"Telegram publishing failed: {e}"
             errors.append(error_msg)
             logger.error(error_msg)
 
-    # Если хотя бы одна публикация успешна (или это text-промпт) - обновляем статус на published
-    if prompt.media_type == "text" or vk_result or telegram_result:
-        prompt.moderation_status = "published"
-
-        # Удаляем локальный файл после успешной публикации
-        if prompt.file_path:
-            try:
-                await delete_file(prompt.file_path)
-                prompt.file_path = None
-                logger.info(f"Deleted local file for prompt {prompt.id}")
-            except Exception as e:
-                logger.warning(f"Failed to delete file {prompt.file_path}: {e}")
+    # Превью с диска, если внешние сервисы не выставили URL (иначе лента покажет плейсхолдер)
+    if file_path_snapshot and prompt.media_type in ("image", "video"):
+        if not prompt.preview_url and file_exists(file_path_snapshot):
+            local_url = file_path_to_public_upload_url(file_path_snapshot)
+            if local_url:
+                prompt.preview_url = local_url
+                logger.info("Fallback preview_url from local file: %s", local_url)
 
     await db.commit()
+
+    # Удаляем файл только если превью — внешнее (например CDN ВК); при /uploads/... файл нужен на диске
+    if file_path_snapshot:
+        preview_val = (prompt.preview_url or "").strip()
+        if preview_val.startswith("/uploads/"):
+            logger.info("Keeping local file for prompt %s (preview %s)", prompt.id, preview_val)
+        elif preview_val:
+            try:
+                await delete_file(file_path_snapshot)
+                prompt.file_path = None
+                await db.commit()
+                logger.info("Deleted local file for prompt %s", prompt.id)
+            except Exception as e:
+                logger.warning("Failed to delete file %s: %s", file_path_snapshot, e)
+        else:
+            logger.warning(
+                "No preview_url after approve; keeping file on disk: %s",
+                file_path_snapshot,
+            )
+
     await db.refresh(prompt)
 
     return {
         "status": "ok",
-        "message": "Prompt approved and published" if prompt.moderation_status == "published" else "Prompt approved but publishing had issues",
+        "message": "Prompt approved and published",
         "prompt": {
             "id": prompt.id,
             "title": prompt.title,

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.models.schemas import GenerateRequest
 from src.services.gemini_service import GeminiService
 from src.redis_client import get_redis
@@ -22,6 +23,12 @@ async def generate_prompt(
     x_session_token: str = Header(default=None),
     current_user: User | None = Depends(get_optional_user)
 ):
+    if not (settings.google_api_key or "").strip():
+        raise HTTPException(
+            status_code=503,
+            detail="Генерация промптов отключена: не задан GOOGLE_API_KEY.",
+        )
+
     # Daily Mana tracking
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     redis = get_redis()
