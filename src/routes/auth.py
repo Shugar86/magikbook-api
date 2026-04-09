@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import logging
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
@@ -17,6 +18,8 @@ from src.config import settings
 from src.database import get_db_session
 from src.models.db_models import EmailOTP, User
 from src.dependencies import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -117,7 +120,7 @@ async def register(
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
-        secure=True, 
+        secure=settings.cookie_secure_effective(),
     )
     
     return {
@@ -159,7 +162,7 @@ async def login(
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
-        secure=True,
+        secure=settings.cookie_secure_effective(),
     )
     
     return {
@@ -171,7 +174,53 @@ async def login(
         "tokens": user.tokens
     }
 
+def _resend_api_key_effective() -> str:
+    """API key for Resend HTTP (443). Many hosts block SMTP to smtp.resend.com."""
+    explicit = (settings.resend_api_key or "").strip()
+    if explicit:
+        return explicit
+    if (settings.smtp_host or "").strip().lower() == "smtp.resend.com":
+        return (settings.smtp_password or "").strip()
+    return ""
+
+
+async def _send_otp_via_resend_api(to_email: str, code: str, api_key: str) -> None:
+    """Send OTP using Resend REST API (works when outbound SMTP is firewall-blocked)."""
+    from_addr = (settings.smtp_from or "").strip() or "onboarding@resend.dev"
+    subject = f"Ваш код входа в MagikBook: {code}"
+    text_body = f"Ваш код: {code}. Действует 10 минут."
+    html_body = f"<p>Ваш код: <b>{code}</b>. Действует 10 минут.</p>"
+    payload = {
+        "from": from_addr,
+        "to": [to_email],
+        "subject": subject,
+        "text": text_body,
+        "html": html_body,
+    }
+    async with httpx.AsyncClient(timeout=25.0) as client:
+        response = await client.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+    if response.status_code >= 400:
+        logger.error(
+            "Resend API rejected email: status=%s body=%s",
+            response.status_code,
+            response.text[:500],
+        )
+        raise RuntimeError(f"Resend API error {response.status_code}")
+
+
 async def _send_otp_email(to_email: str, code: str) -> None:
+    resend_key = _resend_api_key_effective()
+    if resend_key:
+        await _send_otp_via_resend_api(to_email, code, resend_key)
+        return
+
     if not settings.smtp_user or not settings.smtp_password:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -297,7 +346,7 @@ async def verify_otp(
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
-        secure=True,
+        secure=settings.cookie_secure_effective(),
     )
     return {
         "access_token": access_token,
@@ -321,7 +370,8 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "username": current_user.username,
         "tokens": current_user.tokens,
-        "referral_code": current_user.referral_code
+        "referral_code": current_user.referral_code,
+        "is_admin": current_user.is_admin,
     }
 
 
@@ -448,7 +498,7 @@ async def telegram_auth(
             httponly=True,
             max_age=settings.access_token_expire_minutes * 60,
             samesite="lax",
-            secure=True,
+            secure=settings.cookie_secure_effective(),
         )
         
         return {
@@ -481,7 +531,7 @@ async def telegram_auth(
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
-        secure=True,
+        secure=settings.cookie_secure_effective(),
     )
     
     return {
@@ -530,7 +580,14 @@ async def google_login():
     # Редирект на Google
     response = RedirectResponse(url=auth_url)
     # Сохраняем state в куки для проверки при callback
-    response.set_cookie(key="oauth_state", value=state, httponly=True, max_age=600)
+    response.set_cookie(
+        key="oauth_state",
+        value=state,
+        httponly=True,
+        max_age=600,
+        samesite="lax",
+        secure=settings.cookie_secure_effective(),
+    )
     return response
 
 
@@ -625,7 +682,7 @@ async def google_callback(
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
-        secure=True,
+        secure=settings.cookie_secure_effective(),
     )
     redirect.delete_cookie(key="oauth_state")
     return redirect
@@ -665,7 +722,14 @@ async def vk_login():
     # Редирект на VK
     response = RedirectResponse(url=auth_url)
     # Сохраняем state в куки для проверки при callback
-    response.set_cookie(key="oauth_state", value=state, httponly=True, max_age=600)
+    response.set_cookie(
+        key="oauth_state",
+        value=state,
+        httponly=True,
+        max_age=600,
+        samesite="lax",
+        secure=settings.cookie_secure_effective(),
+    )
     return response
 
 
@@ -784,7 +848,7 @@ async def vk_callback(
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
-        secure=True,
+        secure=settings.cookie_secure_effective(),
     )
     redirect.delete_cookie(key="oauth_state")
     return redirect
