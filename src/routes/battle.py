@@ -13,6 +13,9 @@ from src.models.db_models import User, Prompt
 router = APIRouter(prefix="/api/battle")
 logger = logging.getLogger(__name__)
 
+# Seconds between battle votes per IP (must match frontend cooldown messaging).
+BATTLE_VOTE_RATE_LIMIT_SEC = 30
+
 FALLBACK_PROMPTS = [
     {
         "id": "fallback-left",
@@ -52,6 +55,8 @@ FALLBACK_PROMPTS = [
     },
 ]
 
+FALLBACK_VOTE_IDS = frozenset(p["id"] for p in FALLBACK_PROMPTS)
+
 
 class VoteRequest(BaseModel):
     winner_id: str
@@ -88,9 +93,15 @@ async def vote_battle(
     if redis:
         client_ip = request.client.host if request.client else "unknown"
         rl_key = f"battle:rate_limit:{client_ip}"
-        acquired = await redis.set(rl_key, "1", ex=2, nx=True)
+        acquired = await redis.set(
+            rl_key, "1", ex=BATTLE_VOTE_RATE_LIMIT_SEC, nx=True
+        )
         if not acquired:
-            raise HTTPException(status_code=429, detail="Too Many Requests")
+            raise HTTPException(
+                status_code=429,
+                detail="Подождите перед следующим голосом в битве.",
+                headers={"Retry-After": str(BATTLE_VOTE_RATE_LIMIT_SEC)},
+            )
 
     # Get session token from header for anonymous users
     session_token = request.headers.get("x-session-token")
@@ -103,6 +114,16 @@ async def vote_battle(
         )
 
     user_id = current_user.id if current_user else None
+
+    if {payload.winner_id, payload.loser_id} == FALLBACK_VOTE_IDS:
+        return {
+            "status": "ok",
+            "winner": {"id": payload.winner_id, "new_elo": 1200, "votes": 12},
+            "loser": {"id": payload.loser_id, "new_elo": 1200, "votes": 10},
+            "left_pct": 55,
+            "right_pct": 45,
+            "total_votes": 22,
+        }
 
     try:
         result = await svc.record_vote(
