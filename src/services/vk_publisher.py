@@ -329,18 +329,29 @@ def _format_vk_message(
     ai_model: Optional[str],
     prompt_id: str,
 ) -> str:
-    """Форматирует сообщение для публикации в VK."""
+    """Форматирует сообщение для публикации в VK (BBCode-ссылка ведёт себя как кликабельная «кнопка»)."""
+    prompt_url = f"https://magikbook.ru/prompt/{prompt_id}"
     lines = [
-        f"Название: {title}",
+        f"📌 {title}",
         "",
         "Промпт:",
         prompt_text[:2000],
     ]
 
     if ai_model:
-        lines.extend(["", f"Нейросеть: {ai_model}"])
+        lines.extend(["", f"🤖 Нейросеть: {ai_model}"])
 
-    lines.extend(["", f"Источник: https://magikbook.ru/prompt/{prompt_id}"])
+    # VK BBCode: https://dev.vk.com/ru/wall/post-format — ссылка как заметный CTA
+    lines.extend(
+        [
+            "",
+            "───────────────",
+            "",
+            f"[url={prompt_url}|✨ Открыть промпт в MagikBook]",
+            "",
+            prompt_url,
+        ]
+    )
 
     return "\n".join(lines)
 
