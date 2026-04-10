@@ -1,5 +1,6 @@
 """Утилиты для работы с файлами: сохранение, валидация, очистка."""
 
+import io
 import os
 import time
 import shutil
@@ -17,6 +18,9 @@ from src.config import settings
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm"}
 ALLOWED_MEDIA_TYPES = ALLOWED_IMAGE_TYPES | ALLOWED_VIDEO_TYPES
+
+# Лимит файла аватара (загрузка в кабинете)
+AVATAR_MAX_BYTES = 2 * 1024 * 1024
 
 # Расширения файлов
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -220,6 +224,81 @@ def file_exists(file_path: str) -> bool:
     return Path(file_path).exists() if file_path else False
 
 
+def get_avatars_dir() -> Path:
+    """Возвращает каталог ``uploads/avatars`` для пользовательских аватаров."""
+    avatars = get_upload_dir() / "avatars"
+    avatars.mkdir(parents=True, exist_ok=True)
+    return avatars
+
+
+def delete_local_avatar_if_owned(user_id: str, avatar_url: Optional[str]) -> None:
+    """
+    Удаляет локальный файл аватара, если URL указывает на ``/uploads/avatars/``
+    и имя файла начинается с ``user_id_`` (защита от path traversal).
+    """
+    if not avatar_url or "/uploads/avatars/" not in avatar_url:
+        return
+    part = avatar_url.split("/uploads/avatars/", 1)[-1].split("?")[0]
+    if not part or ".." in part or "/" in part:
+        return
+    if not part.startswith(f"{user_id}_"):
+        return
+    base = get_avatars_dir().resolve()
+    try:
+        candidate = (base / part).resolve()
+        candidate.relative_to(base)
+    except ValueError:
+        return
+    try:
+        if candidate.is_file():
+            candidate.unlink()
+    except OSError:
+        pass
+
+
+async def save_user_avatar_file(user_id: str, file: UploadFile) -> str:
+    """
+    Сохраняет изображение аватара в ``uploads/avatars``.
+
+    Args:
+        user_id: ID пользователя (префикс имени файла).
+        file: Загруженный файл (только изображения).
+
+    Returns:
+        Абсолютный путь к сохранённому файлу.
+
+    Raises:
+        HTTPException: При превышении размера, неверном типе или битом файле.
+    """
+    content = await file.read()
+    if len(content) > AVATAR_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Аватар слишком большой (максимум 2 МБ)",
+        )
+    ct = (file.content_type or "").lower()
+    if ct not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail="Допустимы только изображения: JPEG, PNG, WebP, GIF",
+        )
+    try:
+        img = Image.open(io.BytesIO(content))
+        img.load()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Не удалось прочитать изображение: {exc}",
+        ) from exc
+
+    ext = _get_extension_from_content_type(file.content_type) or ".jpg"
+    filename = f"{user_id}_{int(time.time())}{ext}"
+    path = get_avatars_dir() / filename
+    async with aiofiles.open(path, "wb") as out:
+        await out.write(content)
+    return str(path.resolve())
+
+
 def file_path_to_public_upload_url(file_path: str) -> Optional[str]:
     """
     Строит URL вида /uploads/... для раздачи через StaticFiles (корень каталога uploads).
@@ -246,7 +325,3 @@ def file_path_to_public_upload_url(file_path: str) -> Optional[str]:
         sub = norm.split("uploads/", 1)[1].lstrip("/")
         return f"/uploads/{sub}"
     return None
-
-
-# Import io здесь чтобы избежать circular import при использовании в validate_file
-import io  # noqa: E402

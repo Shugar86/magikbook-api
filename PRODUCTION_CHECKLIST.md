@@ -22,6 +22,25 @@
 
 ---
 
+## Бэкап `magikbook.db` (SQLite на VDS)
+
+Файл `./magikbook.db` монтируется с хоста в контейнер (`docker-compose.yml`); **в git не входит** (`.gitignore`). Любая подмена файла на хосте сразу меняет прод-данные (пользователи, админы, промпты).
+
+Журнал одного восстановления (админы, VK-промпты, cron-бэкап): [`docs/INCIDENT_DB_RECOVERY_2026-04-10.md`](docs/INCIDENT_DB_RECOVERY_2026-04-10.md).
+
+- [ ] Настроить **регулярное копирование** на хост, например cron раз в сутки:  
+  `scripts/backup_magikbook_db.sh` — кладёт снимки в `data/backups/magikbook/` (каталог в `.gitignore`), по умолчанию хранит 14 дней (`MAGIKBOOK_DB_BACKUP_RETAIN_DAYS`).
+- [ ] Перед ручной правкой БД: `cp magikbook.db magikbook.db.bak.$(date +%Y%m%d_%H%M%S)`.
+- [ ] Не класть пустой `magikbook.db` из образа поверх хостового файла при деплое.
+
+Пример cron:
+
+```cron
+0 3 * * * root /opt/projects/magikbook-api/scripts/backup_magikbook_db.sh >> /var/log/magikbook-db-backup.log 2>&1
+```
+
+---
+
 ## После каждого деплоя
 
 - [ ] Выполнить **миграции БД** до перезапуска контейнеров с новой версией кода.

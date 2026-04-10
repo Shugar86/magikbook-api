@@ -82,6 +82,8 @@ def run_tests():
     # 3. Feed
     print("\n[3] FEED API:")
     success, body = test_endpoint("GET", "/api/prompts/feed?page=1&page_size=5", 200)
+    body_feed = body
+    success_feed = success
     results.append(("feed", success))
     if success:
         try:
@@ -97,12 +99,29 @@ def run_tests():
     success, _ = test_endpoint("GET", "/api/prompts/feed?media_type=image&filter=trending", 200)
     results.append(("feed_filtered", success))
 
+    # 4b. Категория (slug) + тип медиа — регресс легаси-лейблов в БД
+    print("\n[4b] FEED API CATEGORY + MEDIA_TYPE:")
+    success_cat, body_cat = test_endpoint(
+        "GET",
+        "/api/prompts/feed?category=anime&media_type=image&page_size=5",
+        200,
+    )
+    results.append(("feed_category_anime_image", success_cat))
+    if success_cat:
+        try:
+            data = json.loads(body_cat)
+            total = data.get("total_count", 0)
+            n = len(data.get("prompts", []))
+            print(f"   total_count: {total}, page prompts: {n}")
+        except json.JSONDecodeError:
+            pass
+
     # 5. Specific prompt (если есть данные)
     print("\n[5] SPECIFIC PROMPT:")
-    if success:
+    if success_feed:
         try:
-            # Получим первый промпт из фида
-            data = json.loads(body)
+            # Первый id из общего фида (стабильнее, чем из узкого фильтра)
+            data = json.loads(body_feed)
             prompts = data.get("prompts", [])
             if prompts:
                 prompt_id = prompts[0]["id"]

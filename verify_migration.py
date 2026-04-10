@@ -229,6 +229,12 @@ def check_endpoints():
         ("GET", "/health", 200, "Health check"),
         ("GET", "/api/prompts/homepage", 200, "Homepage API"),
         ("GET", "/api/prompts/feed?page=1&page_size=5", 200, "Feed API"),
+        (
+            "GET",
+            "/api/prompts/feed?category=anime&media_type=image&page_size=5",
+            200,
+            "Feed API category slug + media (legacy label match)",
+        ),
         ("GET", "/api/battle/pair", 200, "Battle pair"),
         ("GET", "/api/auth/me", 401, "Auth me (unauthorized)"),
         ("GET", f"{FRONTEND_URL}/api/prompts/homepage", 200, "Frontend proxy (homepage)"),

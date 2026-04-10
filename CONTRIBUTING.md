@@ -60,6 +60,16 @@ pip install -e ".[dev]"
 ruff check src/ tests/
 ruff format --check src/ tests/
 pytest tests/ -v --tb=short
+python3 scripts/check_category_sync.py
+```
+
+Рядом с репозиторием должен лежать клон фронта `magikbook` (тот же родительский каталог), иначе скрипт синхронизации категорий выведет `SKIP`. Путь к `categories.ts` можно задать переменной `CATEGORIES_TS_PATH`.
+
+Смоук фида по HTTP (когда API запущен):
+
+```bash
+BASE_URL=http://127.0.0.1:8000 ./scripts/verify_feed_curl.sh
+# опционально: FRONTEND_URL=http://127.0.0.1:3000
 ```
 
 Переменные для тестов см. в [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (`env` в job `test`).

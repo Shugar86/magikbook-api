@@ -43,6 +43,8 @@ class Token(BaseModel):
     email: str
     username: str
     tokens: int
+    is_admin: Optional[bool] = None
+    avatar_url: Optional[str] = None
 
 
 class SendOTPBody(BaseModel):
@@ -355,6 +357,8 @@ async def verify_otp(
         "email": user.email or "",
         "username": user.username,
         "tokens": user.tokens,
+        "is_admin": bool(user.is_admin),
+        "avatar_url": user.avatar_url,
     }
 
 
@@ -372,6 +376,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "tokens": current_user.tokens,
         "referral_code": current_user.referral_code,
         "is_admin": current_user.is_admin,
+        "avatar_url": current_user.avatar_url,
     }
 
 

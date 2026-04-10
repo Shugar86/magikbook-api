@@ -35,6 +35,9 @@ jobs:
       - name: Run ruff format check
         run: ruff format --check src/ tests/
 
+      - name: Category sync (categories.ts vs category_labels)
+        run: python3 scripts/check_category_sync.py
+
   test:
     name: Tests (pytest)
     runs-on: ubuntu-latest

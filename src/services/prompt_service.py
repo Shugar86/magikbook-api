@@ -23,6 +23,7 @@ from src.models.schemas import (
     SiteStats,
 )
 from src.redis_client import get_redis
+from src.category_labels import category_values_for_slug_filter
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,8 @@ class PromptService:
         if media_type:
             query = query.where(Prompt.media_type == media_type)
         if category:
-            query = query.where(Prompt.category == category)
+            cat_vals = category_values_for_slug_filter(category)
+            query = query.where(Prompt.category.in_(cat_vals))
 
         if filter == "trending":
             query = query.order_by(Prompt.elo_rating.desc())
@@ -125,7 +127,8 @@ class PromptService:
         if media_type:
             count_q = count_q.where(Prompt.media_type == media_type)
         if category:
-            count_q = count_q.where(Prompt.category == category)
+            cat_vals = category_values_for_slug_filter(category)
+            count_q = count_q.where(Prompt.category.in_(cat_vals))
         total = await self.db.scalar(count_q) or 0
 
         return FeedResponse(

@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,11 @@ from src.dependencies import get_current_user
 from src.models.db_models import Prompt, SavedPrompt, User
 from src.models.schemas import CabinetOverview, CabinetStats, CabinetTopPrompt, UserOut
 from src.redis_client import get_redis
+from src.utils.file_storage import (
+    delete_local_avatar_if_owned,
+    file_path_to_public_upload_url,
+    save_user_avatar_file,
+)
 
 router = APIRouter(prefix="/api/cabinet")
 
@@ -104,3 +109,39 @@ async def get_cabinet_overview(
         ),
         top_prompt=top_prompt,
     )
+
+
+@router.post("/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Загрузить аватар текущего пользователя (JPEG/PNG/WebP/GIF, до 2 МБ).
+
+    Файл сохраняется в ``uploads/avatars``; в профиле хранится путь ``/uploads/avatars/...``.
+    Предыдущий локальный аватар удаляется.
+    """
+    delete_local_avatar_if_owned(current_user.id, current_user.avatar_url)
+    path = await save_user_avatar_file(current_user.id, file)
+    public_url = file_path_to_public_upload_url(path)
+    if not public_url:
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось сформировать URL аватара",
+        )
+    current_user.avatar_url = public_url
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+
+    return {
+        "status": "ok",
+        "avatar_url": public_url,
+        "user": {
+            "id": current_user.id,
+            "username": current_user.username,
+            "avatar_url": current_user.avatar_url,
+        },
+    }
