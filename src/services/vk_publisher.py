@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import mimetypes
 from pathlib import Path
@@ -190,6 +191,15 @@ async def publish_to_vk(
     }
 
 
+def _vk_upload_photo_param(photo_val: Any) -> str:
+    """VK ожидает строку; иногда в JSON приходит массив — сериализуем как в ответе VK."""
+    if photo_val is None:
+        return ""
+    if isinstance(photo_val, str):
+        return photo_val
+    return json.dumps(photo_val, ensure_ascii=False)
+
+
 async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
     """
     Загружает фото на сервер VK.
@@ -197,6 +207,14 @@ async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
     Returns:
         dict: Информация о загруженном фото
     """
+    path = Path(file_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"VK upload: file not found: {file_path}")
+
+    raw = path.read_bytes()
+    if not raw:
+        raise ValueError(f"VK upload: empty file: {file_path}")
+
     upload_url_endpoint = "https://api.vk.com/method/photos.getWallUploadServer"
     upload_params = {
         "access_token": settings.vk_access_token,
@@ -204,7 +222,7 @@ async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
         "group_id": group_id.lstrip("-"),
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         upload_response = await client.get(upload_url_endpoint, params=upload_params)
 
     if upload_response.status_code != 200:
@@ -217,27 +235,60 @@ async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
     upload_url = upload_data["response"]["upload_url"]
 
     mime, _ = mimetypes.guess_type(file_path)
-    async with httpx.AsyncClient() as client:
-        with open(file_path, "rb") as f:
-            files = {"photo": (Path(file_path).name, f, mime or "image/jpeg")}
-            file_response = await client.post(upload_url, files=files)
+    mime = mime or "image/jpeg"
+    fname = path.name
+
+    async def _post_to_upload(field: str) -> httpx.Response:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # Байты целиком — без «обрыва» файлового дескриптора до отправки multipart
+            files = {field: (fname, raw, mime)}
+            return await client.post(upload_url, files=files)
+
+    file_response = await _post_to_upload("photo")
 
     if file_response.status_code != 200:
         raise Exception(f"Failed to upload file: {file_response.text}")
 
-    file_data = file_response.json()
+    try:
+        file_data = file_response.json()
+    except ValueError as e:
+        raise Exception(f"VK upload: non-JSON response: {file_response.text[:500]}") from e
+
+    photo_val = file_data.get("photo")
+    if not photo_val and photo_val != 0:
+        logger.warning(
+            "VK wall upload returned empty photo with field 'photo', retrying with 'file' (%s)",
+            fname,
+        )
+        file_response = await _post_to_upload("file")
+        if file_response.status_code != 200:
+            raise Exception(f"Failed to upload file (retry): {file_response.text}")
+        try:
+            file_data = file_response.json()
+        except ValueError as e:
+            raise Exception(
+                f"VK upload (retry): non-JSON: {file_response.text[:500]}",
+            ) from e
+        photo_val = file_data.get("photo")
+
+    photo_str = _vk_upload_photo_param(photo_val)
+    if not photo_str:
+        logger.error("VK wall upload response (no photo): %s", file_data)
+        raise Exception(
+            "VK upload returned empty photo after upload; check image format/size and multipart field",
+        )
 
     save_url = "https://api.vk.com/method/photos.saveWallPhoto"
     save_params = {
         "access_token": settings.vk_access_token,
         "v": VK_API_VERSION,
         "group_id": group_id.lstrip("-"),
-        "photo": file_data.get("photo"),
+        "photo": photo_str,
         "server": file_data.get("server"),
         "hash": file_data.get("hash"),
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         save_response = await client.post(save_url, params=save_params)
 
     if save_response.status_code != 200:
@@ -329,8 +380,12 @@ def _format_vk_message(
     ai_model: Optional[str],
     prompt_id: str,
 ) -> str:
-    """Форматирует сообщение для публикации в VK (BBCode-ссылка ведёт себя как кликабельная «кнопка»)."""
-    prompt_url = f"https://magikbook.ru/prompt/{prompt_id}"
+    """Форматирует сообщение для публикации в VK (BBCode-ссылка — см. post-format в доке VK)."""
+    # Публичная ссылка на промпт: в проде обычно https://magikbook.ru (см. frontend_url в .env)
+    base = (settings.frontend_url or "https://magikbook.ru").rstrip("/")
+    if not base.startswith("http"):
+        base = f"https://{base}"
+    prompt_url = f"{base}/prompt/{prompt_id}"
     lines = [
         f"📌 {title}",
         "",
@@ -341,14 +396,14 @@ def _format_vk_message(
     if ai_model:
         lines.extend(["", f"🤖 Нейросеть: {ai_model}"])
 
-    # VK BBCode: https://dev.vk.com/ru/wall/post-format — ссылка как заметный CTA
+    # VK wall.post не всегда рендерит BBCode-якорь для внешних ссылок через API.
+    # Делаем предсказуемый формат: CTA-текст + обычный URL, который VK автоссылит.
     lines.extend(
         [
             "",
             "───────────────",
             "",
-            f"[url={prompt_url}|✨ Открыть промпт в MagikBook]",
-            "",
+            "✨ Открыть промпт в MagikBook:",
             prompt_url,
         ]
     )
