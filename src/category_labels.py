@@ -61,6 +61,34 @@ def _build_legacy_map() -> dict[str, str]:
 
 LEGACY_LABEL_BY_SLUG: dict[str, str] = _build_legacy_map()
 
+# Виртуальный slug «holidays»: объединение отдельных праздничных рубрик.
+HOLIDAY_SLUGS: tuple[str, ...] = ("feb14", "feb23", "mar8", "newyear", "birthday")
+
+
+def merged_category_values_for_filters(slugs: list[str]) -> list[str]:
+    """
+    Объединяет значения ``Prompt.category`` для нескольких slug (логика OR).
+
+    Args:
+        slugs: Список slug из UI (например ``anime``, ``holidays``).
+
+    Returns:
+        Уникальные значения для ``WHERE category IN (...)``.
+    """
+    if not slugs:
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in slugs:
+        s = (raw or "").strip()
+        if not s:
+            continue
+        for v in category_values_for_slug_filter(s):
+            if v not in seen:
+                seen.add(v)
+                out.append(v)
+    return out
+
 
 def category_values_for_slug_filter(slug: str) -> list[str]:
     """
@@ -74,6 +102,8 @@ def category_values_for_slug_filter(slug: str) -> list[str]:
     """
     if not slug:
         return []
+    if slug == "holidays":
+        return merged_category_values_for_filters(list(HOLIDAY_SLUGS))
     legacy = LEGACY_LABEL_BY_SLUG.get(slug)
     if legacy and legacy != slug:
         return [slug, legacy]

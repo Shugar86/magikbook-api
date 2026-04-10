@@ -1,7 +1,7 @@
 import logging
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_db_session
@@ -36,7 +36,7 @@ async def get_homepage_data(svc: PromptService = Depends(_service)):
 @router.get("/feed")
 async def get_prompts_feed(
     media_type: Optional[str] = None,
-    category: Optional[str] = None,
+    category: Optional[List[str]] = Query(None, description="Рубрики (OR): повторяющийся query-параметр category"),
     filter: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,

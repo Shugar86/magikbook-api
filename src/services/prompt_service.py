@@ -5,7 +5,7 @@
 import json
 import logging
 import re
-from typing import Optional
+from typing import Optional, Sequence
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -23,7 +23,7 @@ from src.models.schemas import (
     SiteStats,
 )
 from src.redis_client import get_redis
-from src.category_labels import category_values_for_slug_filter
+from src.category_labels import merged_category_values_for_filters
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class PromptService:
     async def get_feed(
         self,
         media_type: Optional[str] = None,
-        category: Optional[str] = None,
+        category: Optional[Sequence[str]] = None,
         filter: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
@@ -102,8 +102,10 @@ class PromptService:
         )
         if media_type:
             query = query.where(Prompt.media_type == media_type)
+        cat_vals: list[str] = []
         if category:
-            cat_vals = category_values_for_slug_filter(category)
+            cat_vals = merged_category_values_for_filters(list(category))
+        if cat_vals:
             query = query.where(Prompt.category.in_(cat_vals))
 
         if filter == "trending":
@@ -126,8 +128,7 @@ class PromptService:
         )
         if media_type:
             count_q = count_q.where(Prompt.media_type == media_type)
-        if category:
-            cat_vals = category_values_for_slug_filter(category)
+        if cat_vals:
             count_q = count_q.where(Prompt.category.in_(cat_vals))
         total = await self.db.scalar(count_q) or 0
 
