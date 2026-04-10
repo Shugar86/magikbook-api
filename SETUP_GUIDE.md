@@ -102,11 +102,12 @@ TELEGRAM_BOT_TOKEN=your_bot_token_here
 3. Получите токен с правами:
    - `wall` (постинг на стену)
    - `photos` (загрузка фото)
+   - `video` (загрузка видео для постов с роликами)
    - `groups` (управление группой)
 
 **Или через Implicit Flow:**
 ```
-https://oauth.vk.com/authorize?client_id=YOUR_APP_ID&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,photos,groups&response_type=token&v=5.199
+https://oauth.vk.com/authorize?client_id=YOUR_APP_ID&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,photos,video,groups&response_type=token&v=5.199
 ```
 
 #### Шаг 2: Настройка группы

@@ -29,7 +29,11 @@ alembic/versions/*.py~
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
+
+# SQLite backups on server
+*.db.bak*
 
 # OS
 .DS_Store

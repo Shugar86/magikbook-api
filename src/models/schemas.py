@@ -40,6 +40,10 @@ class PromptOut(BaseModel):
     result_image_url: Optional[str] = None
     affiliate_links: Optional[Dict[str, str]] = None
 
+    vk_video_owner_id: Optional[int] = Field(default=None, serialization_alias="vkVideoOwnerId")
+    vk_video_id: Optional[int] = Field(default=None, serialization_alias="vkVideoId")
+    vk_video_hash: Optional[str] = Field(default=None, serialization_alias="vkVideoHash")
+
     @model_validator(mode="before")
     @classmethod
     def parse_json_fields(cls, data: Any) -> Any:

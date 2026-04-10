@@ -199,7 +199,7 @@ async def approve_prompt(
     file_path_snapshot = prompt.file_path
 
     # Публикация в VK/TG не влияет на статус (уже published)
-    if prompt.media_type == "image" and file_path_snapshot:
+    if prompt.media_type in ("image", "video") and file_path_snapshot:
         try:
             if await check_vk_config():
                 vk_result = await publish_to_vk(
@@ -208,9 +208,21 @@ async def approve_prompt(
                     ai_model=prompt.ai_model,
                     file_path=file_path_snapshot,
                     prompt_id=prompt.id,
+                    media_type=prompt.media_type,
                 )
                 prompt.vk_post_url = vk_result.get("post_url")
-                prompt.preview_url = vk_result.get("photo_url")
+                vk_preview = vk_result.get("photo_url")
+                if vk_preview:
+                    prompt.preview_url = vk_preview
+                v_own = vk_result.get("video_owner_id")
+                v_id = vk_result.get("video_id")
+                v_hash = vk_result.get("video_hash")
+                if v_own is not None:
+                    prompt.vk_video_owner_id = int(v_own)
+                if v_id is not None:
+                    prompt.vk_video_id = int(v_id)
+                if v_hash:
+                    prompt.vk_video_hash = str(v_hash)
                 logger.info("Published to VK: %s", vk_result.get("post_url"))
             else:
                 errors.append("VK not configured")

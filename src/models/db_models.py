@@ -74,6 +74,10 @@ class Prompt(PromptBase, table=True):
     ai_model: Optional[str] = Field(default=None)  # Для image/video: Midjourney, DALL-E и т.д.
     file_path: Optional[str] = Field(default=None)  # Локальный путь к файлу
     vk_post_url: Optional[str] = Field(default=None)
+    # Встраивание видео ВК (video_ext.php): owner_id, video_id, access_key → hash
+    vk_video_owner_id: Optional[int] = Field(default=None)
+    vk_video_id: Optional[int] = Field(default=None)
+    vk_video_hash: Optional[str] = Field(default=None)
     telegram_message_url: Optional[str] = Field(default=None)
 
     # Поля для виральности и партнёрской монетизации

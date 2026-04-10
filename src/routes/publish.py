@@ -57,10 +57,10 @@ async def manual_publish_vk(
             detail="Prompt not found"
         )
 
-    if prompt.media_type != "image":
+    if prompt.media_type not in ("image", "video"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="VK publishing only supports image prompts"
+            detail="VK publishing only supports image or video prompts",
         )
 
     if not prompt.file_path:
@@ -81,13 +81,24 @@ async def manual_publish_vk(
             prompt_text=prompt.prompt_text,
             ai_model=prompt.ai_model,
             file_path=prompt.file_path,
-            prompt_id=prompt.id
+            prompt_id=prompt.id,
+            media_type=prompt.media_type,
         )
 
         # Обновляем промпт
         prompt.vk_post_url = result.get("post_url")
-        if not prompt.preview_url:
-            prompt.preview_url = result.get("photo_url")
+        vk_preview = result.get("photo_url")
+        if vk_preview and not prompt.preview_url:
+            prompt.preview_url = vk_preview
+        v_own = result.get("video_owner_id")
+        v_id = result.get("video_id")
+        v_hash = result.get("video_hash")
+        if v_own is not None:
+            prompt.vk_video_owner_id = int(v_own)
+        if v_id is not None:
+            prompt.vk_video_id = int(v_id)
+        if v_hash:
+            prompt.vk_video_hash = str(v_hash)
 
         # Если статус был "approved", меняем на "published"
         if prompt.moderation_status == "approved":
