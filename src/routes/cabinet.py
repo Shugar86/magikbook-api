@@ -60,9 +60,13 @@ async def get_cabinet_overview(
     result = await db.execute(prompts_query)
     user_prompts = result.scalars().all()
 
-    # Calculate stats
+    # Calculate stats (published = в ленте, считаем вместе с approved для «Одобрено» в кабинете)
     submitted_count = len(user_prompts)
-    approved_count = sum(1 for p in user_prompts if p.moderation_status == "approved")
+    approved_count = sum(
+        1
+        for p in user_prompts
+        if p.moderation_status in ("approved", "published")
+    )
     pending_count = sum(1 for p in user_prompts if p.moderation_status == "pending")
     rejected_count = sum(1 for p in user_prompts if p.moderation_status == "rejected")
     total_likes = sum(p.likes_count for p in user_prompts)
