@@ -164,8 +164,9 @@ async def publish_to_vk(
         "attachments": attachments,
     }
 
+    # Тело запроса, не query: длинный текст промпта иначе даёт HTTP 414 Request-URI Too Large
     async with httpx.AsyncClient() as client:
-        response = await client.post(post_url, params=post_params)
+        response = await client.post(post_url, data=post_params)
 
     if response.status_code != 200:
         raise Exception(f"VK wall.post failed: {response.text}")
@@ -289,7 +290,7 @@ async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
     }
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        save_response = await client.post(save_url, params=save_params)
+        save_response = await client.post(save_url, data=save_params)
 
     if save_response.status_code != 200:
         raise Exception(f"Failed to save photo: {save_response.text}")
