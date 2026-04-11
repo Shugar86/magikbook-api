@@ -4,7 +4,6 @@ Uses arq cron — registered in WorkerSettings (see elo_flush.py combined worker
 """
 import logging
 
-from arq.connections import RedisSettings
 from arq.cron import cron
 
 from src.database import async_session_maker
@@ -57,14 +56,33 @@ async def refresh_daily_prompt(ctx: dict = None):
 
 # ─── Arq Worker Settings (combined with elo_flush) ────────────────────────────
 
+from src.workers.arq_redis import get_arq_redis_settings
 from src.workers.elo_flush import process_elo_flush
+
+
+async def _worker_startup(ctx: dict) -> None:
+    """Initialize shared Redis client when the arq worker starts.
+
+    Args:
+        ctx: Arq worker context (unused).
+    """
+    await init_redis()
+
+
+async def _worker_shutdown(ctx: dict) -> None:
+    """Close the shared Redis client on worker shutdown.
+
+    Args:
+        ctx: Arq worker context (unused).
+    """
+    await close_redis()
 
 
 class WorkerSettings:
     """Main arq worker — runs both ELO flush (every 5 min) and daily prompt (00:00 UTC)."""
-    redis_settings = RedisSettings(host="localhost", port=6379, database=0)
-    on_startup = [init_redis]
-    on_shutdown = [close_redis]
+    redis_settings = get_arq_redis_settings()
+    on_startup = _worker_startup
+    on_shutdown = _worker_shutdown
     functions = [process_elo_flush, refresh_daily_prompt]
     cron_jobs = [
         cron(refresh_daily_prompt, hour=0, minute=0),  # 00:00 UTC daily

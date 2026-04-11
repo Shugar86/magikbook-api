@@ -48,7 +48,7 @@
 | `dependencies.py` | `get_current_user`, `get_optional_user` (JWT из cookie или Bearer) |
 | `redis_client.py` | Redis или in-memory fallback |
 | `utils/file_storage.py` | Сохранение и валидация загружаемых файлов |
-| `workers/` | `daily_prompt.py`, `elo_flush.py` — фоновые задачи (arq/cron; требуют настроенного Redis и отдельного воркера при деплое) |
+| `workers/` | `arq_redis.py`, `daily_prompt.py`, `elo_flush.py` — фоновые задачи (arq/cron; `REDIS_URL` и контейнер `magikbook-worker` в compose) |
 
 ---
 
@@ -82,6 +82,14 @@
 | `LOG_LEVEL` | Нет | — | То же |
 
 Полный комментированный шаблон: [`.env.example`](.env.example).
+
+### Docker Compose (`/opt/projects/docker-compose.yml`)
+
+Поднимаются **`magikbook-redis`**, **`magikbook-api`**, **`magikbook-worker`**, **`magikbook-frontend`**. Для API и воркера в Compose задано `REDIS_URL=redis://magikbook-redis:6379/0`, так что бонус и лимиты не зависят от in-memory заглушки.
+
+- **Ежедневный бонус** (`POST /api/auth/daily-bonus`) и анонимные лимиты используют ключи с датой **`YYYY-MM-DD` по UTC**. Новый «день» для бонуса наступает в полночь UTC, а не по локальному времени пользователя.
+- **Заклинание дня** на главной обновляет **`magikbook-worker`** (arq: ELO каждые ~5 минут, генерация «дня» в **00:00 UTC**). Нужны рабочий Redis, `GOOGLE_API_KEY` и общий том `magikbook.db` с API.
+- **Диагностика:** `docker logs magikbook-api 2>&1 | grep -i redis` — ожидается `Connected to Redis at redis://...`; строка `Using in-memory Redis stub` значит, что контейнер не видит внешний Redis (часто пустой `REDIS_URL` без Compose). `docker exec magikbook-redis redis-cli ping` → `PONG`. Пример ключа бонуса в Redis: `daily_bonus:<uuid_пользователя>:2026-04-11`.
 
 ---
 

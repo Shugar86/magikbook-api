@@ -85,14 +85,32 @@ async def process_elo_flush(ctx: dict = None):
 
 # ─── Arq Worker Settings ──────────────────────────────────────────────────────
 
-from arq.connections import RedisSettings
 from src.redis_client import init_redis, close_redis
+from src.workers.arq_redis import get_arq_redis_settings
+
+
+async def _elo_worker_startup(ctx: dict) -> None:
+    """Initialize Redis for an ELO-only arq worker.
+
+    Args:
+        ctx: Arq worker context (unused).
+    """
+    await init_redis()
+
+
+async def _elo_worker_shutdown(ctx: dict) -> None:
+    """Close Redis after an ELO-only worker stops.
+
+    Args:
+        ctx: Arq worker context (unused).
+    """
+    await close_redis()
 
 
 class WorkerSettings:
-    redis_settings = RedisSettings(host="localhost", port=6379, database=0)
-    on_startup = [init_redis]
-    on_shutdown = [close_redis]
+    redis_settings = get_arq_redis_settings()
+    on_startup = _elo_worker_startup
+    on_shutdown = _elo_worker_shutdown
     functions = [process_elo_flush]
     # Run every 5 minutes
     from arq.cron import cron
