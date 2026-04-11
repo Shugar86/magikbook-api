@@ -21,6 +21,8 @@
             └── Telegram Bot API (логин, посты в канал)
 ```
 
+Публикация в VK: [`src/services/vk_publisher.py`](src/services/vk_publisher.py) — параметры `wall.post` и `photos.saveWallPhoto` передаются **в теле** POST (form-urlencoded), не в URL; иначе длинный промпт даёт **414 Request-URI Too Large**. Порядок `include_router` в [`src/main.py`](src/main.py): сначала **`uploads`**, затем **`prompts`**, чтобы путь `/api/prompts/my-uploads` не совпадал с `/{prompt_id}`.
+
 Публичный домен обычно проксирует на Next.js; браузер **не** обращается к FastAPI напрямую, кроме случаев прямой настройки reverse proxy на API.
 
 ---

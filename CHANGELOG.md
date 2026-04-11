@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-04-11]
+
+### Исправлено (Backend)
+
+- **VK (`vk_publisher.py`)** — `wall.post` и `photos.saveWallPhoto`: параметры передаются в **теле** POST (form-urlencoded), а не в query string. Длинный текст промпта в `message` иначе давал **HTTP 414 Request-URI Too Large** и пост не создавался.
+- **Маршрутизация (`main.py`)** — `uploads.router` подключается до `prompts.router`, чтобы `GET /api/prompts/my-uploads` не обрабатывался как `GET /api/prompts/{prompt_id}` с `prompt_id=my-uploads` (ложный404 «Prompt not found»).
+- **Кабинет (`cabinet.py`)** — в счётчик «одобрено» на обзоре входят промпты со статусами `approved` и `published`.
+
+---
+
 ## [2026-04-09] — Релиз «наполнение и постинг» (API v0.2.0)
 
 **Статус:** выпущено для наполнения контентом и постинга.

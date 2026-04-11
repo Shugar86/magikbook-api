@@ -326,6 +326,8 @@ python -c "from src.config import settings; print(settings.google_client_id)"
    ```
 2. Бот/приложение добавлено в админы группы?
 3. ID группы указан с минусом? (`-123456789`)
+4. В логах API строка **`414 Request-URI Too Large`** на `wall.post` — устаревший билд: в актуальном коде параметры уходят в **тело** POST (см. [`src/services/vk_publisher.py`](src/services/vk_publisher.py)). Пересоберите контейнер/деплой.
+5. В логах **`Prompt not found`** при открытии вкладки «Мои промпты» в кабинете — проверьте порядок `include_router` в [`src/main.py`](src/main.py): `uploads` должен быть **раньше** `prompts`.
 
 ---
 

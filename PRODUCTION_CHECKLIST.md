@@ -14,7 +14,7 @@
 - [ ] Выполнить миграции: `scripts/upgrade_db.sh` или `alembic upgrade head` в окружении API.
 - [ ] Убедиться, что каталог **`UPLOAD_DIR`** существует и доступен процессу API.
 - [ ] Установить **`is_admin = true`** первому пользователю вручную в БД (таблица `users`), либо после первого входа через **`POST /api/admin/grant/{user_id}`** с другого админа.
-- [ ] Проверить **VK**: `VK_ACCESS_TOKEN`, `VK_GROUP_ID` — вызов API VK вручную или тестовый пост (см. комментарии в `.env.example` про права токена).
+- [ ] Проверить **VK**: `VK_ACCESS_TOKEN`, `VK_GROUP_ID` — вызов API VK вручную или тестовый пост (см. комментарии в `.env.example` про права токена). При **414** на `wall.post` в логах — убедиться, что задеплоена версия API, где VK-методы шлют параметры **в теле** POST, а не в query ([`vk_publisher.py`](src/services/vk_publisher.py)).
 - [ ] Проверить **Telegram**: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID` — тестовое сообщение в канал (если используется автопост).
 - [ ] Для email-OTP: `SMTP_*` или Resend, см. [README.md](README.md); проверка `curl` на `send-otp` как в документе фронта `docs/PRODUCTION.md`.
 - [ ] На фронте: **`BACKEND_URL`** = внутренний URL API (например `http://magikbook-api:8000` в Docker Compose).

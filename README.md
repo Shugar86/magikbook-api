@@ -242,6 +242,12 @@
 
 Код `approve` в [`routes/moderation.py`](src/routes/moderation.py) выставляет статус **`published`** сразу после одобрения (и при необходимости обновляет ссылки на посты).
 
+### Публикация в VK (технически)
+
+- Реализация: [`src/services/vk_publisher.py`](src/services/vk_publisher.py). Вызовы **`wall.post`** и **`photos.saveWallPhoto`** отправляют параметры **в теле** POST (`application/x-www-form-urlencoded`), не в query string. Иначе длинный текст промпта в поле `message` раздувает URL и даёт **414 Request-URI Too Large**.
+- Права токена: нужен **пользовательский** access token с доступом к группе (wall, photos и т.д.); сервисный ключ сообщества для `photos.getWallUploadServer` / `wall.post` с фото обычно **не** подходит (см. комментарии в [`.env.example`](.env.example)).
+- Порядок роутеров в [`src/main.py`](src/main.py): **`uploads`** до **`prompts`**, иначе запрос `GET /api/prompts/my-uploads` может попасть в обработчик `/{prompt_id}`.
+
 ---
 
 ## Известные ограничения
