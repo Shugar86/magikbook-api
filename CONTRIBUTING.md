@@ -11,7 +11,9 @@
 
 2. **CI обязателен для качества:** workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускается на push в `main`/`develop` и на PR в `main`. Перед merge убедитесь, что проверки прошли.
 
-3. **Branch protection (рекомендуется на GitHub):** в настройках репозитория *Settings → Branches → Branch protection rules* для `main` включите:
+3. **Не коммитьте `magikbook.db` и другие `*.db`:** даже при локальной разработке на SQLite файл с прод- или тестовыми данными не должен попадать в историю. Если `git status` показывает отслеживаемый `magikbook.db`, см. [`docs/INCIDENT_GIT_TRACKED_SQLITE_2026-04-11.md`](docs/INCIDENT_GIT_TRACKED_SQLITE_2026-04-11.md).
+
+4. **Branch protection (рекомендуется на GitHub):** в настройках репозитория *Settings → Branches → Branch protection rules* для `main` включите:
    - *Require a pull request before merging* (по желанию);
    - *Require status checks to pass before merging* — отметьте job’ы **Lint (ruff)** и **Tests (pytest)**.
 

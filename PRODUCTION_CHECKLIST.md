@@ -24,9 +24,11 @@
 
 ## Бэкап `magikbook.db` (SQLite на VDS)
 
-Файл `./magikbook.db` монтируется с хоста в контейнер (`docker-compose.yml`); **в git не входит** (`.gitignore`). Любая подмена файла на хосте сразу меняет прод-данные (пользователи, админы, промпты).
+Файл `./magikbook.db` монтируется с хоста в контейнер (`docker-compose.yml`); **в git не должен входить** (`.gitignore`: `*.db`). Если файл когда-то был закоммичен, `.gitignore` его не спасёт — нужен `git rm --cached magikbook.db` (файл на диске не удаляется). Любая подмена файла на хосте сразу меняет прод-данные (пользователи, админы, промпты).
 
-Журнал одного восстановления (админы, VK-промпты, cron-бэкап): [`docs/INCIDENT_DB_RECOVERY_2026-04-10.md`](docs/INCIDENT_DB_RECOVERY_2026-04-10.md).
+- **Никогда** не выполнять `git checkout -- magikbook.db` / `git restore` этой БД из истории на прод-хосте — это перезапишет живую SQLite старым снимком.
+- Журнал: отслеживание БД в git и откат (2026-04-11): [`docs/INCIDENT_GIT_TRACKED_SQLITE_2026-04-11.md`](docs/INCIDENT_GIT_TRACKED_SQLITE_2026-04-11.md).
+- Журнал восстановления (админы, VK-промпты, cron-бэкап): [`docs/INCIDENT_DB_RECOVERY_2026-04-10.md`](docs/INCIDENT_DB_RECOVERY_2026-04-10.md).
 
 - [ ] Настроить **регулярное копирование** на хост, например cron раз в сутки:  
   `scripts/backup_magikbook_db.sh` — кладёт снимки в `data/backups/magikbook/` (каталог в `.gitignore`), по умолчанию хранит 14 дней (`MAGIKBOOK_DB_BACKUP_RETAIN_DAYS`).
