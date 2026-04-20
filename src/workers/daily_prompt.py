@@ -90,7 +90,6 @@ class WorkerSettings:
     redis_settings = get_arq_redis_settings()
     on_startup = _worker_startup
     on_shutdown = _worker_shutdown
-    functions = [process_elo_flush, refresh_daily_prompt]
-    cron_jobs = [
-        cron(refresh_daily_prompt, hour=0, minute=0),  # 00:00 UTC daily
-    ]
+    functions = [process_elo_flush]
+    cron_jobs = []
+
