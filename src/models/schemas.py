@@ -31,6 +31,8 @@ class PromptOut(BaseModel):
     is_new: bool = Field(default=True, serialization_alias="isNew")
     created_at: Optional[datetime] = Field(default=None, serialization_alias="createdAt")
     author_id: Optional[str] = None
+    author_username: Optional[str] = None
+    author_avatar_url: Optional[str] = None
 
     variables: list[str] = []
     target_models: list[str] = Field(default=[], serialization_alias="targetModels")
@@ -207,3 +209,19 @@ class CabinetOverview(BaseModel):
     user: CabinetUserOut
     stats: CabinetStats
     top_prompt: Optional[CabinetTopPrompt] = None
+
+
+class PortfolioUserPublic(BaseModel):
+    """Public user stub for portfolio page."""
+
+    username: str
+    avatar_url: Optional[str] = None
+
+
+class PortfolioResponse(BaseModel):
+    """Public portfolio: user info and published media prompts."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    user: PortfolioUserPublic
+    prompts: list[PromptOut]

@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 VK_API_VERSION = "5.199"
 # Таймаут загрузки крупного видео на сервер VK (сек).
 VK_VIDEO_UPLOAD_TIMEOUT = 300.0
+VK_PUBLISH_TOKEN_PATH = Path("uploads/vk_publish_access_token.txt")
+
+
+def _get_vk_access_token() -> str:
+    """Prefer server-issued user token for wall posting, fallback to .env token."""
+    try:
+        if VK_PUBLISH_TOKEN_PATH.is_file():
+            token = VK_PUBLISH_TOKEN_PATH.read_text(encoding="utf-8").strip()
+            if token:
+                return token
+    except Exception as e:
+        logger.warning("Failed to read VK publish token file: %s", e)
+    return (settings.vk_access_token or "").strip()
 
 
 def _resolve_wall_media_kind(file_path: str, media_type: Optional[str]) -> str:
@@ -41,7 +54,7 @@ async def _vk_video_get_metadata(owner_id: int, video_id: int) -> tuple[Optional
     """
     ep = "https://api.vk.com/method/video.get"
     params = {
-        "access_token": settings.vk_access_token,
+        "access_token": _get_vk_access_token(),
         "v": VK_API_VERSION,
         "videos": f"{owner_id}_{video_id}",
     }
@@ -117,7 +130,7 @@ async def publish_to_vk(
     Raises:
         Exception: При ошибке публикации
     """
-    if not settings.vk_access_token or not settings.vk_group_id:
+    if not _get_vk_access_token() or not settings.vk_group_id:
         raise ValueError("VK credentials not configured")
 
     vk_group_id = settings.vk_group_id
@@ -156,7 +169,7 @@ async def publish_to_vk(
 
     post_url = "https://api.vk.com/method/wall.post"
     post_params: dict[str, Any] = {
-        "access_token": settings.vk_access_token,
+        "access_token": _get_vk_access_token(),
         "v": VK_API_VERSION,
         "owner_id": vk_group_id,
         "from_group": 1,
@@ -165,8 +178,17 @@ async def publish_to_vk(
     }
 
     # Тело запроса, не query: длинный текст промпта иначе даёт HTTP 414 Request-URI Too Large
-    async with httpx.AsyncClient() as client:
-        response = await client.post(post_url, data=post_params)
+    last_exc: Exception | None = None
+    for _attempt in range(2):  # одна повторная попытка при сетевых ошибках
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                response = await client.post(post_url, data=post_params)
+            break
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            last_exc = exc
+            logger.warning("wall.post attempt %d failed: %s", _attempt + 1, exc)
+    else:
+        raise Exception(f"VK wall.post network error after retries: {last_exc}")
 
     if response.status_code != 200:
         raise Exception(f"VK wall.post failed: {response.text}")
@@ -218,7 +240,7 @@ async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
 
     upload_url_endpoint = "https://api.vk.com/method/photos.getWallUploadServer"
     upload_params = {
-        "access_token": settings.vk_access_token,
+        "access_token": _get_vk_access_token(),
         "v": VK_API_VERSION,
         "group_id": group_id.lstrip("-"),
     }
@@ -281,7 +303,7 @@ async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
 
     save_url = "https://api.vk.com/method/photos.saveWallPhoto"
     save_params = {
-        "access_token": settings.vk_access_token,
+        "access_token": _get_vk_access_token(),
         "v": VK_API_VERSION,
         "group_id": group_id.lstrip("-"),
         "photo": photo_str,
@@ -312,7 +334,7 @@ async def _upload_video_to_vk(file_path: str, vk_group_id: str, title: str) -> d
     gid = vk_group_id.lstrip("-")
     save_ep = "https://api.vk.com/method/video.save"
     save_params = {
-        "access_token": settings.vk_access_token,
+        "access_token": _get_vk_access_token(),
         "v": VK_API_VERSION,
         "group_id": gid,
         "name": title or "Magikbook",
@@ -414,4 +436,4 @@ def _format_vk_message(
 
 async def check_vk_config() -> bool:
     """Проверяет настроена ли интеграция с VK."""
-    return bool(settings.vk_access_token and settings.vk_group_id)
+    return bool(_get_vk_access_token() and settings.vk_group_id)

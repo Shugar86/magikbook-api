@@ -19,7 +19,14 @@ async def refresh_daily_prompt(ctx: dict = None):
     """
     Generates a new daily prompt via Gemini and inserts it into the DB.
     Run every day at 00:00 UTC via arq cron.
+
+    Controlled by DAILY_PROMPT_ENABLED env var (default: false).
     """
+    from src.config import settings
+    if not settings.daily_prompt_enabled:
+        logger.info("Daily prompt generation skipped (DAILY_PROMPT_ENABLED=false)")
+        return
+
     logger.info("Generating daily spell of the day...")
     request = GenerateRequest(
         category="daily",

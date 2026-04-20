@@ -188,7 +188,7 @@ async def approve_prompt(
 
     prompt.moderated_by = current_user.id
     prompt.moderated_at = datetime.utcnow()
-    prompt.moderation_status = "published"
+    # Статус ставим через published УЖЕ ПОСЛЕ попытки публикации (внизу по тексту)
 
     await db.commit()
     await db.refresh(prompt)
@@ -198,7 +198,11 @@ async def approve_prompt(
     errors: list[str] = []
     file_path_snapshot = prompt.file_path
 
-    # Публикация в VK/TG не влияет на статус (уже published)
+    # Текстовые промпты не публикуются через VK/TG — только image/video
+    if prompt.media_type == "text":
+        errors.append("VK/Telegram publishing skipped: text-only prompts are not posted to social media")
+
+    # Публикация в VK/TG не влияет на статус (уже будет published)
     if prompt.media_type in ("image", "video") and file_path_snapshot:
         try:
             if await check_vk_config():
@@ -282,7 +286,10 @@ async def approve_prompt(
                 file_path_snapshot,
             )
 
-    await db.refresh(prompt)
+    # Теперь меняем статус на published
+    if prompt.moderation_status != "published":
+        prompt.moderation_status = "published"
+    await db.commit()
 
     return {
         "status": "ok",

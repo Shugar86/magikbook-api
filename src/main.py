@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
-from src.routes import auth, battle, cabinet, generate, grimoire, prompts, paywall, test_setup, uploads, moderation, publish
+from src.routes import auth, battle, cabinet, generate, grimoire, prompts, paywall, test_setup, uploads, moderation, publish, users
 from src.database import init_db
 from src.redis_client import init_redis, close_redis
 from fastapi.staticfiles import StaticFiles
@@ -56,6 +56,7 @@ app.include_router(generate.router)
 app.include_router(battle.router)
 app.include_router(grimoire.router)
 app.include_router(auth.router)
+app.include_router(users.router)
 # uploads before prompts: /api/prompts/my-uploads must not match /api/prompts/{prompt_id}
 app.include_router(uploads.router)
 app.include_router(prompts.router)

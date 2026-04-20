@@ -34,6 +34,8 @@ class Settings(BaseSettings):
 
     # Publishing Configuration
     vk_access_token: str = ""
+    # Сервисный ключ приложения (ограниченный scope). Постинг wall+фото/видео использует vk_access_token.
+    vk_service_access_token: str = ""
     vk_group_id: str = ""  # с минусом, например "-123456789"
     telegram_channel_id: str = ""  # @channel_username или числовой ID
 
@@ -42,6 +44,10 @@ class Settings(BaseSettings):
 
     # If set, overrides auto secure cookies (True/False). None = secure only in production.
     cookie_secure: Optional[bool] = Field(default=None)
+
+    # Daily prompt auto-generation via Gemini (arq cron 00:00 UTC).
+    # Set to true in .env to re-enable. Default: disabled.
+    daily_prompt_enabled: bool = Field(default=False)
 
     # SMTP (email OTP) — на многих VPS исходящий SMTP (465/587) заблокирован
     smtp_host: str = "smtp.yandex.ru"
