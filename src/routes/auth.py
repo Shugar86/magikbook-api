@@ -138,7 +138,7 @@ async def register(
     
     # Set HttpOnly cookie
     response.set_cookie(
-        key="access_token",
+        key="access_token", path="/",
         value=access_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -180,7 +180,7 @@ async def login(
     
     # Set HttpOnly cookie
     response.set_cookie(
-        key="access_token",
+        key="access_token", path="/",
         value=access_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -364,7 +364,7 @@ async def verify_otp(
 
     access_token = create_access_token(data={"sub": user.id})
     response.set_cookie(
-        key="access_token",
+        key="access_token", path="/",
         value=access_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -519,7 +519,7 @@ async def telegram_auth(
         
         # Set HttpOnly cookie
         response.set_cookie(
-            key="access_token",
+            key="access_token", path="/",
             value=access_token,
             httponly=True,
             max_age=settings.access_token_expire_minutes * 60,
@@ -552,7 +552,7 @@ async def telegram_auth(
     
     # Set HttpOnly cookie
     response.set_cookie(
-        key="access_token",
+        key="access_token", path="/",
         value=access_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -703,7 +703,7 @@ async def google_callback(
     from fastapi.responses import RedirectResponse as _RedirectResponse
     redirect = _RedirectResponse(url=settings.frontend_url or "/")
     redirect.set_cookie(
-        key="access_token",
+        key="access_token", path="/",
         value=jwt_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -1015,7 +1015,7 @@ async def vk_callback(
     </body></html>"""
     response = HTMLResponse(content=html)
     response.set_cookie(
-        key="access_token",
+        key="access_token", path="/",
         value=jwt_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -1050,7 +1050,7 @@ async def vk_session_from_sdk(
     }
     response = JSONResponse(content=body)
     response.set_cookie(
-        key="access_token",
+        key="access_token", path="/",
         value=jwt_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
