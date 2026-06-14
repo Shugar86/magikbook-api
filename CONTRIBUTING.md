@@ -1,61 +1,66 @@
-# Участие в разработке (magikbook-api)
+# 🧙 Участие в разработке MagikBook API
 
-## Ветки и pull request
+Спасибо, что заглянул в гримуар! Ниже — правила игры, чтобы магия не превратилась в хаос.
 
-1. **Не пушьте напрямую в `main` с продакшн-сервера без ревью**, если команда договорилась о PR. Рабочий минимум:
-   - ветка от актуального `main`: `feature/кратко-о-задаче` или `fix/кратко`;
-   - изменения, `git push -u origin имя-ветки`;
-   - **Pull Request в `main`** на GitHub;
-   - дождаться **зелёного CI** (ruff + pytest) и при необходимости ревью;
-   - merge в `main` (squash или merge — по договорённости).
+## 🌿 Ветки и pull request
 
-2. **CI обязателен для качества:** workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускается на push в `main`/`develop` и на PR в `main`. Перед merge убедитесь, что проверки прошли.
+1. **Не пушь напрямую в `main`** с продакшн-сервера без ревью (если договорились иначе — обсуди).
+2. Создавай ветку от актуального `main`:
 
-3. **Не коммитьте `magikbook.db` и другие `*.db`:** даже при локальной разработке на SQLite файл с прод- или тестовыми данными не должен попадать в историю. Если `git status` показывает отслеживаемый `magikbook.db`, см. [`docs/INCIDENT_GIT_TRACKED_SQLITE_2026-04-11.md`](docs/INCIDENT_GIT_TRACKED_SQLITE_2026-04-11.md).
+   ```bash
+   git checkout -b feature/кратко-о-задаче
+   # или
+   git checkout -b fix/кратко-о-баге
+   ```
 
-4. **Branch protection (рекомендуется на GitHub):** в настройках репозитория *Settings → Branches → Branch protection rules* для `main` включите:
-   - *Require a pull request before merging* (по желанию);
-   - *Require status checks to pass before merging* — отметьте job’ы **Lint (ruff)** и **Tests (pytest)**.
+3. Сделай изменения — **минимальный diff**, KISS.
+4. Запушь ветку:
 
-Так пайплайн перестаёт быть «декоративным»: без зелёных проверок merge блокируется.
+   ```bash
+   git push -u origin имя-ветки
+   ```
 
----
+5. Открой **Pull Request в `main`** на GitHub.
+6. Дождись зелёного CI (ruff + pytest) и при необходимости ревью.
+7. Merge в `main` (squash или merge — по договорённости).
 
-## Git: автор коммитов (не root и не автогенератор)
+### CI обязателен
 
-Коммиты вида `root@v2202603...` и приписки **Made-with: Cursor** ухудшают историю и аудит.
+Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускается на push в `main`/`develop` и на PR в `main`. Перед merge убедись, что проверки прошли.
 
-### Идентификатор разработчика
+### Branch protection (рекомендуется)
 
-На машине, где вы коммитите (в т.ч. VPS), один раз задайте:
+В настройках репозитория GitHub *Settings → Branches → Branch protection rules* для `main` включи:
+
+- *Require a pull request before merging* (по желанию);
+- *Require status checks to pass before merging* — job’ы **Lint (ruff)** и **Tests (pytest)**.
+
+## 🪪 Git: автор коммитов
+
+Коммиты вида `root@v2202603...` и приписки `Made-with: Cursor` ухудшают историю.
+
+Задай автора один раз на машине, где коммитишь:
 
 ```bash
-git config --global user.name "Ваше Имя"
-git config --global user.email "your@email.com"
+git config --global user.name "Твоё Имя"
+git config --global user.email "you@example.com"
 ```
 
-Для **одного репозитория** без глобальной смены:
+Или только для репозитория:
 
 ```bash
-cd /path/to/magikbook-api
-git config user.name "Ваше Имя"
-git config user.email "your@email.com"
+git config user.name "Твоё Имя"
+git config user.email "you@example.com"
 ```
 
-Проверка: `git config user.name` и `git log -1 --format='%an <%ae>'`.
+Проверка:
 
-### Приписка Made-with: Cursor
+```bash
+git config user.name
+git log -1 --format='%an <%ae>'
+```
 
-Она добавляется средой Cursor к сообщению коммита. Рекомендации:
-
-- Перед финальным коммитом **отредактируйте сообщение** и удалите строку `Made-with: Cursor`, либо отключите соответствующую опцию в **Cursor Settings** (раздел про Git / коммиты — название может меняться между версиями).
-- Либо коммитьте из терминала: `git commit` после ручного ввода сообщения без лишних строк.
-
-Итог: в истории должен быть осмысленный заголовок (и при необходимости тело) **без** служебных хвостов, автор — **реальный человек или бот с осмысленным именем**, не `root`.
-
----
-
-## Локальные проверки до push
+## 🧹 Локальные проверки до push
 
 ```bash
 pip install -e ".[dev]"
@@ -76,8 +81,19 @@ BASE_URL=http://127.0.0.1:8000 ./scripts/verify_feed_curl.sh
 
 Переменные для тестов см. в [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (`env` в job `test`).
 
+## 🛡️ Что нельзя коммитить
+
+- `.env`, `*.pem`, `id_*`, токены, пароли.
+- `magikbook.db` и другие `*.db` — даже при локальной разработке.
+- `uploads/` — пользовательские файлы.
+- `__pycache__/`, `.pytest_cache/`, `*.egg-info/` (если не отслеживаются).
+
+Если `git status` показывает отслеживаемый `magikbook.db`, читай [`docs/INCIDENT_GIT_TRACKED_SQLITE_2026-04-11.md`](docs/INCIDENT_GIT_TRACKED_SQLITE_2026-04-11.md).
+
+## 🏷️ Релизы
+
+Версии и теги согласовывай с фронтендом. Кратко — в [`README.md`](README.md) и [`CHANGELOG.md`](CHANGELOG.md).
+
 ---
 
-## Релизы
-
-Версии и теги согласуйте с фронтендом; кратко см. [README.md](README.md) и [CHANGELOG.md](CHANGELOG.md).
+Если хочешь что-то обсудить до PR — открывай issue. Магия любит диалог ✨

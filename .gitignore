@@ -34,6 +34,10 @@ alembic/versions/*.py~
 
 # SQLite backups on server
 *.db.bak*
+*.db.before-restore*
+
+# Token analysis doc — may contain sensitive app IDs / token paths
+token.md
 
 # OS
 .DS_Store

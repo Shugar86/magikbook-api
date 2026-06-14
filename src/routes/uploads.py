@@ -2,18 +2,57 @@
 
 from typing import Optional
 import json
+import logging
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.database import get_db_session
 from src.dependencies import get_current_user
-from src.models.db_models import Prompt, User
+from src.models.db_models import BattleVote, Prompt, User
 from src.utils.file_storage import validate_file, save_upload_file
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+async def _battle_wins_and_losses_by_prompt(
+    db: AsyncSession, prompt_ids: list[str]
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Aggregate battle wins and losses per prompt id (two grouped queries)."""
+    if not prompt_ids:
+        return {}, {}
+
+    try:
+        win_rows = (
+            await db.execute(
+                select(BattleVote.winner_id, func.count())
+                .where(BattleVote.winner_id.in_(prompt_ids))
+                .group_by(BattleVote.winner_id)
+            )
+        ).all()
+        wins = {str(row[0]): int(row[1]) for row in win_rows}
+
+        loss_rows = (
+            await db.execute(
+                select(BattleVote.loser_id, func.count())
+                .where(BattleVote.loser_id.in_(prompt_ids))
+                .group_by(BattleVote.loser_id)
+            )
+        ).all()
+        losses = {str(row[0]): int(row[1]) for row in loss_rows}
+        return wins, losses
+    except SQLAlchemyError as exc:
+        logger.exception("Database error loading battle aggregates")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Temporary error loading battle statistics",
+        ) from exc
 
 
 @router.post("/api/prompts/upload")
@@ -159,6 +198,20 @@ async def get_my_uploads(
     result = await db.execute(query)
     prompts = result.scalars().all()
 
+    ids = [p.id for p in prompts]
+    wins_map, losses_map = await _battle_wins_and_losses_by_prompt(db, ids)
+
+    def battle_fields(prompt_id: str) -> dict[str, float | int]:
+        w = wins_map.get(prompt_id, 0)
+        l = losses_map.get(prompt_id, 0)
+        total = w + l
+        pct = round((w / total) * 100.0, 1) if total > 0 else 0.0
+        return {
+            "battle_wins": w,
+            "battle_total_votes": total,
+            "win_percentage": pct,
+        }
+
     return {
         "prompts": [
             {
@@ -173,6 +226,9 @@ async def get_my_uploads(
                 "likes_count": p.likes_count,
                 "copies": p.copies,
                 "preview_url": p.preview_url,
+                "elo_rating": p.elo_rating,
+                "remixes": p.remixes,
+                **battle_fields(p.id),
             }
             for p in prompts
         ],

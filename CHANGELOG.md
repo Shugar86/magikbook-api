@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Документация
+
+- Vibe-first pass: обновлён `README.md`, создан `AGENTS.md`, добавлен `LICENSE` (MIT), обновлены `CONTRIBUTING.md` и `CHANGELOG.md`.
+
 ## [2026-04-11]
 
 ### Исправлено (Backend)

@@ -75,7 +75,9 @@ async def test_vote_rate_limit_second_request_429(client: AsyncClient, monkeypat
 
     import src.redis_client
 
-    monkeypatch.setattr(src.redis_client, "get_redis", lambda: BusyRedis())
+    # Один экземпляр: иначе каждый вызов get_redis() сбрасывает «первый» rate-limit.
+    busy_redis = BusyRedis()
+    monkeypatch.setattr(src.redis_client, "get_redis", lambda: busy_redis)
 
     headers = {"X-Session-Token": "test-session-rl"}
     r1 = await client.post(

@@ -12,12 +12,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.db_models import Like, Prompt
+from src.models.db_models import Like, Prompt, User
 from src.models.schemas import (
     FeedResponse,
     HomepageResponse,
     LikeResponse,
     OgMeta,
+    PortfolioResponse,
+    PortfolioUserPublic,
     PromptCreate,
     PromptOut,
     SiteStats,
@@ -31,6 +33,35 @@ logger = logging.getLogger(__name__)
 class PromptService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _authors_by_ids(self, author_ids: Sequence[Optional[str]]) -> dict[str, tuple[str, Optional[str]]]:
+        """Load username and avatar_url for distinct author IDs."""
+        unique = {aid for aid in author_ids if aid}
+        if not unique:
+            return {}
+        result = await self.db.execute(select(User).where(User.id.in_(unique)))
+        users = result.scalars().all()
+        return {u.id: (u.username, u.avatar_url) for u in users}
+
+    def _prompt_out_with_authors(
+        self, prompt: Prompt, authors: dict[str, tuple[str, Optional[str]]]
+    ) -> PromptOut:
+        """Build PromptOut and attach author display fields when available."""
+        base = PromptOut.model_validate(prompt)
+        if not prompt.author_id:
+            return base
+        info = authors.get(prompt.author_id)
+        if not info:
+            return base
+        username, avatar_url = info
+        return base.model_copy(
+            update={"author_username": username, "author_avatar_url": avatar_url}
+        )
+
+    async def _serialize_prompts_with_authors(self, prompts: Sequence[Prompt]) -> list[PromptOut]:
+        """Batch-resolve authors for a list of prompts."""
+        authors = await self._authors_by_ids([p.author_id for p in prompts])
+        return [self._prompt_out_with_authors(p, authors) for p in prompts]
 
     # ─── Статистика ────────────────────────────────────────────
 
@@ -79,10 +110,17 @@ class PromptService:
         daily_prompt = trending_text[0] if trending_text else None
         stats = await self.get_stats()
 
+        text_out = await self._serialize_prompts_with_authors(trending_text)
+        media_out = await self._serialize_prompts_with_authors(trending_media)
+        daily_out = (
+            (await self._serialize_prompts_with_authors([daily_prompt]))[0]
+            if daily_prompt
+            else None
+        )
         return HomepageResponse(
-            trending_text=[PromptOut.model_validate(p) for p in trending_text],
-            trending_media=[PromptOut.model_validate(p) for p in trending_media],
-            daily_prompt=PromptOut.model_validate(daily_prompt) if daily_prompt else None,
+            trending_text=text_out,
+            trending_media=media_out,
+            daily_prompt=daily_out,
             stats=stats,
         )
 
@@ -132,8 +170,9 @@ class PromptService:
             count_q = count_q.where(Prompt.category.in_(cat_vals))
         total = await self.db.scalar(count_q) or 0
 
+        prompts_out = await self._serialize_prompts_with_authors(prompts)
         return FeedResponse(
-            prompts=[PromptOut.model_validate(p) for p in prompts],
+            prompts=prompts_out,
             total_count=total,
             page=page,
             page_size=page_size,
@@ -147,7 +186,32 @@ class PromptService:
         prompt = await self.db.get(Prompt, prompt_id)
         if not prompt or prompt.moderation_status not in ("approved", "published"):
             raise HTTPException(status_code=404, detail="Prompt not found")
-        return PromptOut.model_validate(prompt)
+        authors = await self._authors_by_ids([prompt.author_id])
+        return self._prompt_out_with_authors(prompt, authors)
+
+    async def get_public_portfolio(self, username: str) -> PortfolioResponse:
+        """Public media prompts for a user by username (approved/published only)."""
+        user_row = await self.db.execute(select(User).where(User.username == username))
+        user = user_row.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        media_result = await self.db.execute(
+            select(Prompt)
+            .where(Prompt.author_id == user.id)
+            .where(Prompt.media_type.in_(["image", "video"]))
+            .where(Prompt.moderation_status.in_(["approved", "published"]))
+            .order_by(Prompt.elo_rating.desc())
+        )
+        prompts = media_result.scalars().all()
+        authors_map: dict[str, tuple[str, Optional[str]]] = {
+            user.id: (user.username, user.avatar_url)
+        }
+        prompts_out = [self._prompt_out_with_authors(p, authors_map) for p in prompts]
+        return PortfolioResponse(
+            user=PortfolioUserPublic(username=user.username, avatar_url=user.avatar_url),
+            prompts=prompts_out,
+        )
 
     async def get_og_meta(self, prompt_id: str) -> OgMeta:
         """Get OpenGraph metadata for a prompt."""
@@ -201,7 +265,8 @@ class PromptService:
         self.db.add(prompt)
         await self.db.commit()
         await self.db.refresh(prompt)
-        return PromptOut.model_validate(prompt)
+        authors = await self._authors_by_ids([prompt.author_id])
+        return self._prompt_out_with_authors(prompt, authors)
 
     # ─── Лайки ─────────────────────────────────────────────────
 
