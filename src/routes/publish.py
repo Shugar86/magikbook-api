@@ -1,7 +1,5 @@
 """Fallback endpoints для ручной публикации (если автопостинг не сработал)."""
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,16 +16,19 @@ router = APIRouter()
 
 class VKPublishRequest(BaseModel):
     """Запрос на публикацию в VK."""
+
     prompt_id: str
 
 
 class TelegramPublishRequest(BaseModel):
     """Запрос на публикацию в Telegram."""
+
     prompt_id: str
 
 
 class ManualPreviewUrlRequest(BaseModel):
     """Запрос на установку preview_url вручную."""
+
     preview_url: str
 
 
@@ -35,7 +36,7 @@ class ManualPreviewUrlRequest(BaseModel):
 async def manual_publish_vk(
     request: VKPublishRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Ручная публикация в VK (фолбэк для модерации).
@@ -46,15 +47,14 @@ async def manual_publish_vk(
     if not await check_vk_config():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="VK publishing not configured"
+            detail="VK publishing not configured",
         )
 
     # Получаем промпт
     prompt = await db.get(Prompt, request.prompt_id)
     if not prompt:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Prompt not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found"
         )
 
     if prompt.media_type not in ("image", "video"):
@@ -65,14 +65,13 @@ async def manual_publish_vk(
 
     if not prompt.file_path:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No file to publish"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No file to publish"
         )
 
     if not file_exists(prompt.file_path):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File not found: {prompt.file_path}"
+            detail=f"File not found: {prompt.file_path}",
         )
 
     try:
@@ -120,7 +119,7 @@ async def manual_publish_vk(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"VK publishing failed: {str(e)}"
+            detail=f"VK publishing failed: {str(e)}",
         )
 
 
@@ -128,7 +127,7 @@ async def manual_publish_vk(
 async def manual_publish_telegram(
     request: TelegramPublishRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Ручная публикация в Telegram (фолбэк для модерации).
@@ -139,33 +138,31 @@ async def manual_publish_telegram(
     if not await check_telegram_config():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Telegram publishing not configured"
+            detail="Telegram publishing not configured",
         )
 
     # Получаем промпт
     prompt = await db.get(Prompt, request.prompt_id)
     if not prompt:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Prompt not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found"
         )
 
     if prompt.media_type not in ("image", "video"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Telegram publishing only supports image/video prompts"
+            detail="Telegram publishing only supports image/video prompts",
         )
 
     if not prompt.file_path:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No file to publish"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No file to publish"
         )
 
     if not file_exists(prompt.file_path):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File not found: {prompt.file_path}"
+            detail=f"File not found: {prompt.file_path}",
         )
 
     try:
@@ -175,7 +172,7 @@ async def manual_publish_telegram(
             ai_model=prompt.ai_model,
             file_path=prompt.file_path,
             media_type=prompt.media_type,
-            prompt_id=prompt.id
+            prompt_id=prompt.id,
         )
 
         # Обновляем промпт
@@ -201,7 +198,7 @@ async def manual_publish_telegram(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Telegram publishing failed: {str(e)}"
+            detail=f"Telegram publishing failed: {str(e)}",
         )
 
 
@@ -210,7 +207,7 @@ async def set_manual_preview_url(
     prompt_id: str,
     request: ManualPreviewUrlRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Установить preview_url вручную (например, после ручной загрузки в VK).
@@ -221,14 +218,13 @@ async def set_manual_preview_url(
     prompt = await db.get(Prompt, prompt_id)
     if not prompt:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Prompt not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found"
         )
 
     if prompt.moderation_status not in ("approved", "published"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Prompt must be approved first"
+            detail="Prompt must be approved first",
         )
 
     # Устанавливаем preview_url
@@ -253,5 +249,5 @@ async def set_manual_preview_url(
             "id": prompt.id,
             "preview_url": prompt.preview_url,
             "moderation_status": prompt.moderation_status,
-        }
+        },
     }

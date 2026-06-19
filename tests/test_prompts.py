@@ -1,4 +1,5 @@
 """Tests for prompt endpoints."""
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +51,9 @@ async def test_feed_pagination_keys(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_feed_with_category_and_media_type_returns_200(client: AsyncClient):
     """Feed with category slug and media_type should return 200 (empty DB is ok)."""
-    resp = await client.get("/api/prompts/feed?category=anime&media_type=image&page_size=5")
+    resp = await client.get(
+        "/api/prompts/feed?category=anime&media_type=image&page_size=5"
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert "prompts" in data
@@ -74,7 +77,9 @@ async def test_feed_category_slug_matches_legacy_label_in_db(
     db_session.add(p)
     await db_session.commit()
 
-    resp = await client.get("/api/prompts/feed?category=anime&media_type=image&page_size=20")
+    resp = await client.get(
+        "/api/prompts/feed?category=anime&media_type=image&page_size=20"
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["total_count"] >= 1

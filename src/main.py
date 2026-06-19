@@ -1,11 +1,25 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
-from src.routes import auth, battle, cabinet, generate, grimoire, prompts, paywall, test_setup, uploads, moderation, publish, users
+from src.routes import (
+    auth,
+    battle,
+    cabinet,
+    generate,
+    grimoire,
+    prompts,
+    paywall,
+    test_setup,
+    uploads,
+    moderation,
+    publish,
+    users,
+)
 from src.database import init_db
 from src.redis_client import init_redis, close_redis
 from fastapi.staticfiles import StaticFiles
@@ -69,9 +83,9 @@ if settings.environment == "development":
     app.include_router(test_setup.router)
     logger.warning("⚠️  test_setup router ENABLED (dev mode only!)")
 
-import os
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 @app.get("/health")
 async def health_check():

@@ -7,9 +7,9 @@ Redis keys written by /api/battle/vote:
 
 This worker is run periodically (e.g. every 5 minutes via arq cron).
 """
+
 import logging
 
-from sqlalchemy import select
 
 from src.database import async_session_maker
 from src.redis_client import get_redis
@@ -55,7 +55,9 @@ async def process_elo_flush(ctx: dict = None):
 
             prompt = await session.get(Prompt, prompt_id)
             if not prompt:
-                logger.warning("ELO flush: prompt %s not found in DB, skipping.", prompt_id)
+                logger.warning(
+                    "ELO flush: prompt %s not found in DB, skipping.", prompt_id
+                )
                 await redis.delete(key, f"battle:{prompt_id}:losses")
                 continue
 
@@ -63,12 +65,16 @@ async def process_elo_flush(ctx: dict = None):
 
             # Apply wins: each win is against an average-rated opponent
             for _ in range(wins):
-                new_rating, _ = EloService.calculate_new_ratings(current_rating, AVERAGE_RATING)
+                new_rating, _ = EloService.calculate_new_ratings(
+                    current_rating, AVERAGE_RATING
+                )
                 current_rating = new_rating
 
             # Apply losses: each loss is against an average-rated opponent
             for _ in range(losses):
-                _, new_rating = EloService.calculate_new_ratings(AVERAGE_RATING, current_rating)
+                _, new_rating = EloService.calculate_new_ratings(
+                    AVERAGE_RATING, current_rating
+                )
                 current_rating = new_rating
 
             prompt.elo_rating = current_rating
@@ -85,8 +91,8 @@ async def process_elo_flush(ctx: dict = None):
 
 # ─── Arq Worker Settings ──────────────────────────────────────────────────────
 
-from src.redis_client import init_redis, close_redis
-from src.workers.arq_redis import get_arq_redis_settings
+from src.redis_client import init_redis, close_redis  # noqa: E402
+from src.workers.arq_redis import get_arq_redis_settings  # noqa: E402
 
 
 async def _elo_worker_startup(ctx: dict) -> None:
@@ -114,4 +120,7 @@ class WorkerSettings:
     functions = [process_elo_flush]
     # Run every 5 minutes
     from arq.cron import cron
-    cron_jobs = [cron(process_elo_flush, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55})]
+
+    cron_jobs = [
+        cron(process_elo_flush, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55})
+    ]

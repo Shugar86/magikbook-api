@@ -11,7 +11,6 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import settings
 from src.database import get_db_session
 from src.dependencies import get_current_user
 from src.models.db_models import Prompt, User
@@ -41,7 +40,7 @@ async def get_moderation_queue(
     page: int = 1,
     page_size: int = 20,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Получить список промптов на модерацию.
@@ -56,8 +55,7 @@ async def get_moderation_queue(
     """
     if not _is_admin(current_user):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
         )
 
     query = select(Prompt)
@@ -77,6 +75,7 @@ async def get_moderation_queue(
 
     # Получаем общее количество
     from sqlalchemy import func
+
     count_query = select(func.count()).select_from(Prompt)
     if moderation_status != "all":
         count_query = count_query.where(Prompt.moderation_status == moderation_status)
@@ -105,7 +104,7 @@ async def get_moderation_queue(
         "total_count": total_count,
         "page": page,
         "page_size": page_size,
-        "has_more": total_count > (offset + len(prompts))
+        "has_more": total_count > (offset + len(prompts)),
     }
 
 
@@ -142,7 +141,9 @@ async def get_moderation_file(
         )
     path = _resolve_moderation_upload_file(filename)
     if not path:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        )
     media_type, _ = mimetypes.guess_type(str(path))
     return FileResponse(
         path,
@@ -155,7 +156,7 @@ async def get_moderation_file(
 async def approve_prompt(
     prompt_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Одобрить промпт и запустить автопостинг в VK и Telegram.
@@ -168,22 +169,20 @@ async def approve_prompt(
     """
     if not _is_admin(current_user):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
         )
 
     # Получаем промпт
     prompt = await db.get(Prompt, prompt_id)
     if not prompt:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Prompt not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found"
         )
 
     if prompt.moderation_status not in ("pending", "rejected"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot approve prompt with status: {prompt.moderation_status}"
+            detail=f"Cannot approve prompt with status: {prompt.moderation_status}",
         )
 
     prompt.moderated_by = current_user.id
@@ -200,7 +199,9 @@ async def approve_prompt(
 
     # Текстовые промпты не публикуются через VK/TG — только image/video
     if prompt.media_type == "text":
-        errors.append("VK/Telegram publishing skipped: text-only prompts are not posted to social media")
+        errors.append(
+            "VK/Telegram publishing skipped: text-only prompts are not posted to social media"
+        )
 
     # Публикация в VK/TG не влияет на статус (уже будет published)
     if prompt.media_type in ("image", "video") and file_path_snapshot:
@@ -248,7 +249,9 @@ async def approve_prompt(
                     prompt_id=prompt.id,
                 )
                 prompt.telegram_message_url = telegram_result.get("message_url")
-                logger.info("Published to Telegram: %s", telegram_result.get("message_url"))
+                logger.info(
+                    "Published to Telegram: %s", telegram_result.get("message_url")
+                )
             else:
                 errors.append("Telegram not configured")
                 logger.warning("Telegram publishing skipped - not configured")
@@ -271,7 +274,9 @@ async def approve_prompt(
     if file_path_snapshot:
         preview_val = (prompt.preview_url or "").strip()
         if preview_val.startswith("/uploads/"):
-            logger.info("Keeping local file for prompt %s (preview %s)", prompt.id, preview_val)
+            logger.info(
+                "Keeping local file for prompt %s (preview %s)", prompt.id, preview_val
+            )
         elif preview_val:
             try:
                 await delete_file(file_path_snapshot)
@@ -315,7 +320,7 @@ async def reject_prompt(
     prompt_id: str,
     reason: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Отклонить промпт и удалить связанный файл.
@@ -329,22 +334,20 @@ async def reject_prompt(
     """
     if not _is_admin(current_user):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
         )
 
     # Получаем промпт
     prompt = await db.get(Prompt, prompt_id)
     if not prompt:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Prompt not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found"
         )
 
     if prompt.moderation_status == "published":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot reject already published prompt"
+            detail="Cannot reject already published prompt",
         )
 
     # Удаляем файл если есть
@@ -374,15 +377,17 @@ async def reject_prompt(
             "id": prompt.id,
             "title": prompt.title,
             "moderation_status": prompt.moderation_status,
-            "moderated_at": prompt.moderated_at.isoformat() if prompt.moderated_at else None,
-        }
+            "moderated_at": prompt.moderated_at.isoformat()
+            if prompt.moderated_at
+            else None,
+        },
     }
 
 
 @router.get("/api/moderation/stats")
 async def get_moderation_stats(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Получить статистику модерации.
@@ -392,15 +397,13 @@ async def get_moderation_stats(
     """
     if not _is_admin(current_user):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
         )
 
     from sqlalchemy import func
 
     query = select(
-        Prompt.moderation_status,
-        func.count(Prompt.id).label("count")
+        Prompt.moderation_status, func.count(Prompt.id).label("count")
     ).group_by(Prompt.moderation_status)
 
     result = await db.execute(query)
@@ -417,7 +420,7 @@ async def get_moderation_stats(
         "publishing_configured": {
             "vk": await check_vk_config(),
             "telegram": await check_telegram_config(),
-        }
+        },
     }
 
 
@@ -433,7 +436,9 @@ async def grant_admin_rights(
 
     target_user = await db.get(User, user_id)
     if not target_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     target_user.is_admin = True
     await db.commit()
@@ -453,7 +458,9 @@ async def update_affiliate_links(
 
     prompt = await db.get(Prompt, prompt_id)
     if not prompt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found"
+        )
 
     # Convert dict to JSON string for storage
     prompt.affiliate_links_str = json.dumps(payload.affiliate_links, ensure_ascii=False)

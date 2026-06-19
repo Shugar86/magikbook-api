@@ -1,4 +1,5 @@
 """Tests for battle endpoints."""
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 from src.main import app
@@ -8,11 +9,13 @@ from src.routes.battle import BATTLE_VOTE_RATE_LIMIT_SEC
 @pytest.mark.asyncio
 async def test_vote_success(monkeypatch):
     """Test that voting works (legacy test with mocked Redis)."""
+
     class DummyRedis:
         async def set(self, key, value, ex=None, nx=None):
             return True  # Rate limit acquired
 
     import src.redis_client
+
     monkeypatch.setattr(src.redis_client, "get_redis", lambda: DummyRedis())
 
     transport = ASGITransport(app=app)

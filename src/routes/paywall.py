@@ -1,17 +1,17 @@
 """
 Paywall routes: Telegram Stars and Social Paywall (subscription checking).
 """
+
 import logging
-from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.database import get_db_session
-from src.dependencies import get_current_user, get_optional_user
+from src.dependencies import get_current_user
 from src.models.db_models import User
 
 router = APIRouter(prefix="/api/paywall")
@@ -47,7 +47,9 @@ async def buy_mana_with_stars(
     )
 
 
-async def _check_telegram_subscription(telegram_user_id: int, channel_username: str) -> bool:
+async def _check_telegram_subscription(
+    telegram_user_id: int, channel_username: str
+) -> bool:
     """
     Calls Telegram Bot API getChatMember to check if user is subscribed to a channel.
     Returns True if the user is a member/admin/creator, False otherwise.
@@ -110,7 +112,9 @@ async def check_telegram_subscription(
 
     logger.info(
         "User %s received %d mana for subscribing to %s",
-        current_user.id, bonus_mana, payload.channel_username,
+        current_user.id,
+        bonus_mana,
+        payload.channel_username,
     )
     return {
         "status": "ok",

@@ -2,9 +2,9 @@
 Daily prompt worker: generates a fresh "Spell of the Day" via Gemini and saves it to DB.
 Uses arq cron — registered in WorkerSettings (see elo_flush.py combined worker).
 """
+
 import logging
 
-from arq.cron import cron
 
 from src.database import async_session_maker
 from src.models.db_models import Prompt
@@ -23,6 +23,7 @@ async def refresh_daily_prompt(ctx: dict = None):
     Controlled by DAILY_PROMPT_ENABLED env var (default: false).
     """
     from src.config import settings
+
     if not settings.daily_prompt_enabled:
         logger.info("Daily prompt generation skipped (DAILY_PROMPT_ENABLED=false)")
         return
@@ -53,7 +54,7 @@ async def refresh_daily_prompt(ctx: dict = None):
             prompt_text=prompt_text.strip(),
             media_type="text",
             category="daily",
-            is_trending=True,   # make it visible in feed
+            is_trending=True,  # make it visible in feed
             is_new=True,
         )
         session.add(new_prompt)
@@ -63,8 +64,8 @@ async def refresh_daily_prompt(ctx: dict = None):
 
 # ─── Arq Worker Settings (combined with elo_flush) ────────────────────────────
 
-from src.workers.arq_redis import get_arq_redis_settings
-from src.workers.elo_flush import process_elo_flush
+from src.workers.arq_redis import get_arq_redis_settings  # noqa: E402
+from src.workers.elo_flush import process_elo_flush  # noqa: E402
 
 
 async def _worker_startup(ctx: dict) -> None:
@@ -87,9 +88,9 @@ async def _worker_shutdown(ctx: dict) -> None:
 
 class WorkerSettings:
     """Main arq worker — runs both ELO flush (every 5 min) and daily prompt (00:00 UTC)."""
+
     redis_settings = get_arq_redis_settings()
     on_startup = _worker_startup
     on_shutdown = _worker_shutdown
     functions = [process_elo_flush]
     cron_jobs = []
-

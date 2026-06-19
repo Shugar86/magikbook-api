@@ -1,10 +1,11 @@
 import uuid
 from typing import Optional
-from sqlmodel import SQLModel, Field, String, Integer
+from sqlmodel import SQLModel, Field
 
 from sqlalchemy import UniqueConstraint
 import json
 from datetime import datetime
+
 
 class PromptBase(SQLModel):
     title: str
@@ -12,8 +13,8 @@ class PromptBase(SQLModel):
     preview_url: Optional[str] = None
     media_type: str = Field(default="text", index=True)
     category: str = Field(index=True)
-    variables_str: Optional[str] = Field(default=None) # JSON list
-    target_models_str: Optional[str] = Field(default=None) # JSON list
+    variables_str: Optional[str] = Field(default=None)  # JSON list
+    target_models_str: Optional[str] = Field(default=None)  # JSON list
     tone: Optional[str] = Field(default=None)
 
     @property
@@ -21,12 +22,13 @@ class PromptBase(SQLModel):
         if not self.variables_str:
             return []
         return json.loads(self.variables_str)
-        
+
     @property
     def target_models(self) -> list[str]:
         if not self.target_models_str:
             return []
         return json.loads(self.target_models_str)
+
 
 class EmailOTP(SQLModel, table=True):
     __tablename__ = "email_otps"
@@ -48,11 +50,16 @@ class User(SQLModel, table=True):
     hashed_password: Optional[str] = Field(default=None)
     username: str
     tokens: int = Field(default=10)  # стартовый баланс генераций
-    referral_code: str = Field(unique=True, index=True, default_factory=lambda: str(uuid.uuid4())[:8])
+    referral_code: str = Field(
+        unique=True, index=True, default_factory=lambda: str(uuid.uuid4())[:8]
+    )
     referred_by: Optional[str] = Field(default=None)  # код человека, который привел
-    auth_provider: str = Field(default="email")  # "email" | "google" | "vk" | "telegram"
+    auth_provider: str = Field(
+        default="email"
+    )  # "email" | "google" | "vk" | "telegram"
     avatar_url: Optional[str] = Field(default=None)
     is_admin: bool = Field(default=False)
+
 
 class Prompt(PromptBase, table=True):
     __tablename__ = "prompts"
@@ -68,10 +75,14 @@ class Prompt(PromptBase, table=True):
     author_id: Optional[str] = Field(default=None, foreign_key="users.id")
 
     # Moderation fields
-    moderation_status: str = Field(default="pending", index=True)  # "pending" | "approved" | "rejected" | "published"
+    moderation_status: str = Field(
+        default="pending", index=True
+    )  # "pending" | "approved" | "rejected" | "published"
     moderated_by: Optional[str] = Field(default=None, foreign_key="users.id")
     moderated_at: Optional[datetime] = Field(default=None)
-    ai_model: Optional[str] = Field(default=None)  # Для image/video: Midjourney, DALL-E и т.д.
+    ai_model: Optional[str] = Field(
+        default=None
+    )  # Для image/video: Midjourney, DALL-E и т.д.
     file_path: Optional[str] = Field(default=None)  # Локальный путь к файлу
     vk_post_url: Optional[str] = Field(default=None)
     # Встраивание видео ВК (video_ext.php): owner_id, video_id, access_key → hash
@@ -83,16 +94,19 @@ class Prompt(PromptBase, table=True):
     # Поля для виральности и партнёрской монетизации
     result_example: Optional[str] = Field(
         default=None,
-        sa_column_kwargs={"comment": "Текстовый пример результата применения промпта"}
+        sa_column_kwargs={"comment": "Текстовый пример результата применения промпта"},
     )
     result_image_url: Optional[str] = Field(
         default=None,
-        sa_column_kwargs={"comment": "URL скриншота или сгенерированного изображения-результата"}
+        sa_column_kwargs={
+            "comment": "URL скриншота или сгенерированного изображения-результата"
+        },
     )
     affiliate_links_str: Optional[str] = Field(
         default=None,
-        sa_column_kwargs={"comment": "JSON dict: {midjourney: url, runway: url, ...}"}
+        sa_column_kwargs={"comment": "JSON dict: {midjourney: url, runway: url, ...}"},
     )
+
 
 class SavedPrompt(SQLModel, table=True):
     __tablename__ = "saved_prompts"
@@ -101,7 +115,10 @@ class SavedPrompt(SQLModel, table=True):
     user_id: str = Field(foreign_key="users.id", index=True)
     prompt_id: str = Field(foreign_key="prompts.id")
 
-    __table_args__ = (UniqueConstraint("user_id", "prompt_id", name="uq_saved_user_prompt"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "prompt_id", name="uq_saved_user_prompt"),
+    )
+
 
 class Like(SQLModel, table=True):
     __tablename__ = "likes"
@@ -110,7 +127,9 @@ class Like(SQLModel, table=True):
     user_id: str = Field(foreign_key="users.id", index=True)
     prompt_id: str = Field(foreign_key="prompts.id")
 
-    __table_args__ = (UniqueConstraint("user_id", "prompt_id", name="uq_like_user_prompt"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "prompt_id", name="uq_like_user_prompt"),
+    )
 
 
 class BattleVote(SQLModel, table=True):
@@ -118,12 +137,18 @@ class BattleVote(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[str] = Field(default=None, foreign_key="users.id", index=True)
-    session_token: Optional[str] = Field(default=None, index=True)  # For anonymous users
+    session_token: Optional[str] = Field(
+        default=None, index=True
+    )  # For anonymous users
     winner_id: str = Field(foreign_key="prompts.id", index=True)
     loser_id: str = Field(foreign_key="prompts.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint("user_id", "winner_id", "loser_id", name="uq_battle_vote_user_pair"),
-        UniqueConstraint("session_token", "winner_id", "loser_id", name="uq_battle_vote_session_pair"),
+        UniqueConstraint(
+            "user_id", "winner_id", "loser_id", name="uq_battle_vote_user_pair"
+        ),
+        UniqueConstraint(
+            "session_token", "winner_id", "loser_id", name="uq_battle_vote_session_pair"
+        ),
     )

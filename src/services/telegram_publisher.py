@@ -16,7 +16,7 @@ async def publish_to_telegram(
     ai_model: Optional[str],
     file_path: str,
     media_type: str,  # "image" | "video"
-    prompt_id: str
+    prompt_id: str,
 ) -> dict:
     """
     Публикация промпта в Telegram канал.
@@ -56,7 +56,9 @@ async def publish_to_telegram(
     # Отправляем файл с подписью
     async with httpx.AsyncClient() as client:
         with open(file_path, "rb") as f:
-            files = {file_param: (file_path.split("/")[-1], f, _get_mime_type(media_type))}
+            files = {
+                file_param: (file_path.split("/")[-1], f, _get_mime_type(media_type))
+            }
             data = {
                 "chat_id": settings.telegram_channel_id,
                 "caption": caption,
@@ -94,12 +96,10 @@ async def publish_to_telegram(
 
 
 def _format_telegram_caption(
-    title: str,
-    prompt_text: str,
-    ai_model: Optional[str],
-    prompt_id: str
+    title: str, prompt_text: str, ai_model: Optional[str], prompt_id: str
 ) -> str:
     """Форматирует подпись для Telegram."""
+
     # Экранируем HTML-символы в тексте
     def escape_html(text: str) -> str:
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -114,7 +114,10 @@ def _format_telegram_caption(
     if ai_model:
         lines.extend(["", f"Нейросеть: {escape_html(ai_model)}"])
 
-    lines.extend(["", f"👉 <a href='https://magikbook.ru/prompt/{prompt_id}'>magikbook.ru</a>"])
+    base = (settings.frontend_url or "http://localhost:3000").rstrip("/")
+    prompt_url = f"{base}/prompt/{prompt_id}"
+    link_text = base.replace("https://", "").replace("http://", "")
+    lines.extend(["", f"👉 <a href='{prompt_url}'>{link_text}</a>"])
 
     caption = "\n".join(lines)
 
@@ -124,7 +127,7 @@ def _format_telegram_caption(
         caption = (
             f"<b>{escape_html(title)}</b>\n\n"
             f"Промпт:\n<code>{truncated_text}...</code>\n\n"
-            f"👉 <a href='https://magikbook.ru/prompt/{prompt_id}'>magikbook.ru</a>"
+            f"👉 <a href='{prompt_url}'>{link_text}</a>"
         )
 
     return caption
@@ -160,17 +163,22 @@ async def send_text_message(text: str) -> dict:
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
 
     async with httpx.AsyncClient() as client:
-        response = await client.post(url, json={
-            "chat_id": settings.telegram_channel_id,
-            "text": text,
-            "parse_mode": "HTML",
-        })
+        response = await client.post(
+            url,
+            json={
+                "chat_id": settings.telegram_channel_id,
+                "text": text,
+                "parse_mode": "HTML",
+            },
+        )
 
     if response.status_code != 200:
         raise Exception(f"Telegram API error: {response.text}")
 
     result = response.json()
     if not result.get("ok"):
-        raise Exception(f"Telegram API error: {result.get('description', 'Unknown error')}")
+        raise Exception(
+            f"Telegram API error: {result.get('description', 'Unknown error')}"
+        )
 
     return result["result"]

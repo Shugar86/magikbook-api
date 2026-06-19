@@ -1,5 +1,4 @@
 import logging
-import asyncio
 from asyncio import TimeoutError, timeout
 from typing import AsyncIterator
 
@@ -24,14 +23,15 @@ def _get_genai_client() -> genai.Client:
         _genai_client = genai.Client(api_key=key)
     return _genai_client
 
+
 # Модели по приоритету: от быстрой/дешевой к запасным
 # Актуальные модели по результатам проверки (23 марта 2026)
 GEMINI_MODELS = [
-    "gemini-2.5-flash-lite",                # Самая быстрая и дешевая (рекомендуется)
-    "gemini-2.5-flash",                     # Основная модель 2.5 поколения
-    "gemini-2.0-flash-lite",                # Стабильная lite версия 2.0
-    "gemini-2.0-flash",                     # Стандартная 2.0
-    "gemini-1.5-flash",                     # Запасная предыдущего поколения
+    "gemini-2.5-flash-lite",  # Самая быстрая и дешевая (рекомендуется)
+    "gemini-2.5-flash",  # Основная модель 2.5 поколения
+    "gemini-2.0-flash-lite",  # Стабильная lite версия 2.0
+    "gemini-2.0-flash",  # Стандартная 2.0
+    "gemini-1.5-flash",  # Запасная предыдущего поколения
 ]
 
 
@@ -51,9 +51,7 @@ def build_system_prompt(request: GenerateRequest) -> str:
 class GeminiService:
     @staticmethod
     async def _try_generate_with_model(
-        model: str,
-        request: GenerateRequest,
-        timeout_seconds: int
+        model: str, request: GenerateRequest, timeout_seconds: int
     ) -> AsyncIterator[str]:
         """Попытка генерации с конкретной моделью."""
         try:
@@ -75,10 +73,18 @@ class GeminiService:
         except Exception as e:
             error_str = str(e).lower()
             # Проверяем на rate limit ошибки
-            if "429" in error_str or "too many requests" in error_str or "quota exceeded" in error_str:
+            if (
+                "429" in error_str
+                or "too many requests" in error_str
+                or "quota exceeded" in error_str
+            ):
                 raise RateLimitError(f"Rate limit for {model}: {e}")
             # Модель не найдена или недоступна - тоже пробуем следующую
-            if "not found" in error_str or "not supported" in error_str or "invalid model" in error_str:
+            if (
+                "not found" in error_str
+                or "not supported" in error_str
+                or "invalid model" in error_str
+            ):
                 logger.warning(f"Model {model} not available: {e}")
                 raise RateLimitError(f"Model not available {model}: {e}")
             raise
@@ -86,7 +92,7 @@ class GeminiService:
     @staticmethod
     async def generate_prompt_stream(request: GenerateRequest) -> AsyncIterator[str]:
         last_error = None
-        
+
         for model in GEMINI_MODELS:
             try:
                 logger.info(f"Trying model: {model}")
@@ -116,13 +122,14 @@ class GeminiService:
                 last_error = e
                 # Для других ошибок тоже пробуем fallback
                 continue
-        
+
         # Если все модели исчерпаны
         error_msg = f"Все модели недоступны. Последняя ошибка: {last_error}"
         logger.error(error_msg)
-        yield f"Ошибка генерации: квота API исчерпана. Попробуйте через минуту или обратитесь к администратору."
+        yield "Ошибка генерации: квота API исчерпана. Попробуйте через минуту или обратитесь к администратору."
 
 
 class RateLimitError(Exception):
     """Ошибка превышения квоты API."""
+
     pass

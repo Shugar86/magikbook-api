@@ -29,7 +29,9 @@ class PromptOut(BaseModel):
     # camelCase aliases for frontend compatibility
     is_trending: bool = Field(default=False, serialization_alias="isTrending")
     is_new: bool = Field(default=True, serialization_alias="isNew")
-    created_at: Optional[datetime] = Field(default=None, serialization_alias="createdAt")
+    created_at: Optional[datetime] = Field(
+        default=None, serialization_alias="createdAt"
+    )
     author_id: Optional[str] = None
     author_username: Optional[str] = None
     author_avatar_url: Optional[str] = None
@@ -42,9 +44,13 @@ class PromptOut(BaseModel):
     result_image_url: Optional[str] = None
     affiliate_links: Optional[Dict[str, str]] = None
 
-    vk_video_owner_id: Optional[int] = Field(default=None, serialization_alias="vkVideoOwnerId")
+    vk_video_owner_id: Optional[int] = Field(
+        default=None, serialization_alias="vkVideoOwnerId"
+    )
     vk_video_id: Optional[int] = Field(default=None, serialization_alias="vkVideoId")
-    vk_video_hash: Optional[str] = Field(default=None, serialization_alias="vkVideoHash")
+    vk_video_hash: Optional[str] = Field(
+        default=None, serialization_alias="vkVideoHash"
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -94,7 +100,10 @@ class PromptCreate(BaseModel):
 class AffiliateLinksUpdate(BaseModel):
     """Request model for updating affiliate links (admin only)."""
 
-    affiliate_links: Dict[str, str] = Field(..., description="Dictionary of partner links, e.g. {'midjourney': 'https://...'}")
+    affiliate_links: Dict[str, str] = Field(
+        ...,
+        description="Dictionary of partner links, e.g. {'midjourney': 'https://...'}",
+    )
 
 
 class SiteStats(BaseModel):

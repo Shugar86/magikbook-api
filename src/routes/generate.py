@@ -15,13 +15,14 @@ from src.models.db_models import User
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
 @router.post("/api/generate")
 async def generate_prompt(
     request: GenerateRequest,
     req: Request,
     db: AsyncSession = Depends(get_db_session),
     x_session_token: str = Header(default=None),
-    current_user: User | None = Depends(get_optional_user)
+    current_user: User | None = Depends(get_optional_user),
 ):
     if not (settings.google_api_key or "").strip():
         raise HTTPException(
@@ -32,7 +33,7 @@ async def generate_prompt(
     # Daily Mana tracking
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     redis = get_redis()
-    
+
     if current_user:
         if current_user.tokens <= 0:
             raise HTTPException(status_code=402, detail="Магия иссякла")
@@ -52,25 +53,15 @@ async def generate_prompt(
             # First use today: set 24h expiry (86400 seconds)
             await redis.expire(key, 86400)
 
-
     async def event_generator():
         try:
             async for chunk in GeminiService.generate_prompt_stream(request):
                 # Send SSE data event
-                yield {
-                    "event": "message",
-                    "data": json.dumps({"text": chunk})
-                }
+                yield {"event": "message", "data": json.dumps({"text": chunk})}
             # End of stream event
-            yield {
-                "event": "done",
-                "data": json.dumps({"text": ""})
-            }
+            yield {"event": "done", "data": json.dumps({"text": ""})}
         except Exception as e:
             logger.error(f"Error streaming response: {e}")
-            yield {
-                "event": "error",
-                "data": json.dumps({"error": str(e)})
-            }
+            yield {"event": "error", "data": json.dumps({"error": str(e)})}
 
     return EventSourceResponse(event_generator())

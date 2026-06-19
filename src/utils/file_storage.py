@@ -1,10 +1,7 @@
 """Утилиты для работы с файлами: сохранение, валидация, очистка."""
 
 import io
-import os
 import time
-import shutil
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -69,7 +66,7 @@ async def validate_file(file: UploadFile, media_type: str) -> bool:
     if len(content) > settings.max_file_size:
         raise HTTPException(
             status_code=413,
-            detail=f"File too large. Max size: {settings.max_file_size / (1024 * 1024):.0f} MB"
+            detail=f"File too large. Max size: {settings.max_file_size / (1024 * 1024):.0f} MB",
         )
 
     # Проверка MIME-type
@@ -77,20 +74,18 @@ async def validate_file(file: UploadFile, media_type: str) -> bool:
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported file type: {file.content_type}. "
-                   f"Allowed: {', '.join(ALLOWED_MEDIA_TYPES)}"
+            f"Allowed: {', '.join(ALLOWED_MEDIA_TYPES)}",
         )
 
     # Проверка соответствия media_type и content_type
     if media_type == "image" and file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
-            status_code=415,
-            detail=f"Expected image file, got: {file.content_type}"
+            status_code=415, detail=f"Expected image file, got: {file.content_type}"
         )
 
     if media_type == "video" and file.content_type not in ALLOWED_VIDEO_TYPES:
         raise HTTPException(
-            status_code=415,
-            detail=f"Expected video file, got: {file.content_type}"
+            status_code=415, detail=f"Expected video file, got: {file.content_type}"
         )
 
     # Для изображений - дополнительная валидация через Pillow
@@ -99,19 +94,12 @@ async def validate_file(file: UploadFile, media_type: str) -> bool:
             img = Image.open(io.BytesIO(content))
             img.verify()  # Проверяем что это валидное изображение
         except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid image file: {str(e)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
 
     return True
 
 
-async def save_upload_file(
-    file: UploadFile,
-    user_id: str,
-    prompt_id: str
-) -> str:
+async def save_upload_file(file: UploadFile, user_id: str, prompt_id: str) -> str:
     """
     Сохраняет загруженный файл во временную директорию.
 
@@ -316,7 +304,7 @@ def file_path_to_public_upload_url(file_path: str) -> Optional[str]:
         parts = resolved.parts
         for i, part in enumerate(parts):
             if part == "uploads" and i + 1 < len(parts):
-                rel = "/".join(parts[i + 1:])
+                rel = "/".join(parts[i + 1 :])
                 return f"/uploads/{rel}"
     except (OSError, ValueError):
         pass

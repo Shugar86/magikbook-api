@@ -7,7 +7,7 @@ from typing import Optional
 import src.redis_client as redis_client
 from src.database import get_db_session
 from src.services.battle_service import BattleService
-from src.dependencies import get_current_user, get_optional_user
+from src.dependencies import get_optional_user
 from src.models.db_models import User, Prompt
 
 router = APIRouter(prefix="/api/battle")
@@ -89,7 +89,7 @@ async def vote_battle(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     """Record a battle vote and update ELO ratings.
-    
+
     Requires authentication OR session token to prevent duplicate votes.
     Returns real vote percentages based on all votes in database.
     """
@@ -97,9 +97,7 @@ async def vote_battle(
     if redis:
         client_ip = request.client.host if request.client else "unknown"
         rl_key = f"battle:rate_limit:{client_ip}"
-        acquired = await redis.set(
-            rl_key, "1", ex=BATTLE_VOTE_RATE_LIMIT_SEC, nx=True
-        )
+        acquired = await redis.set(rl_key, "1", ex=BATTLE_VOTE_RATE_LIMIT_SEC, nx=True)
         if not acquired:
             raise HTTPException(
                 status_code=429,
@@ -114,8 +112,8 @@ async def vote_battle(
     # Require either user auth or session token
     if not current_user and not session_token:
         raise HTTPException(
-            status_code=401, 
-            detail="Authentication required. Please log in or provide session token."
+            status_code=401,
+            detail="Authentication required. Please log in or provide session token.",
         )
 
     user_id = current_user.id if current_user else None
@@ -132,10 +130,10 @@ async def vote_battle(
 
     try:
         result = await svc.record_vote(
-            payload.winner_id, 
-            payload.loser_id, 
-            user_id=user_id, 
-            session_token=session_token
+            payload.winner_id,
+            payload.loser_id,
+            user_id=user_id,
+            session_token=session_token,
         )
         return result
     except HTTPException:
@@ -152,7 +150,7 @@ async def get_battle_stats(
 ):
     """Get battle statistics for a specific prompt."""
     win_pct, total_votes = await svc.get_vote_percentages(prompt_id)
-    
+
     prompt = await svc.db.get(Prompt, prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")

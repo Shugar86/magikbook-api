@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -70,8 +69,10 @@ async def get_grimoire(
         dict: List of saved prompts with total count
     """
     # Get total count by user_id
-    count_query = select(func.count()).select_from(SavedPrompt).where(
-        SavedPrompt.user_id == current_user.id
+    count_query = (
+        select(func.count())
+        .select_from(SavedPrompt)
+        .where(SavedPrompt.user_id == current_user.id)
     )
     total_count = (await db.scalar(count_query)) or 0
 
@@ -96,7 +97,8 @@ async def get_grimoire(
                 "category": p.category,
                 "likes_count": p.likes_count,
                 "copies": p.copies,
-            } for p in prompts
+            }
+            for p in prompts
         ],
         "total": total_count,
         "skip": skip,

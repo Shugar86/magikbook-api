@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import hashlib
+import hmac
 import logging
 import secrets
+import time as time_module
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -32,6 +35,7 @@ def _save_vk_publish_token(token: str) -> None:
     """Persist server-valid VK publish token on a mounted volume."""
     VK_PUBLISH_TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
     VK_PUBLISH_TOKEN_PATH.write_text(token.strip(), encoding="utf-8")
+
 
 class UserRegister(BaseModel):
     email: EmailStr
@@ -91,80 +95,85 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         else timedelta(minutes=settings.access_token_expire_minutes)
     )
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    encoded_jwt = jwt.encode(
+        to_encode, settings.secret_key, algorithm=settings.algorithm
+    )
     return encoded_jwt
+
 
 @router.post("/register", response_model=Token)
 async def register(
-    user_data: UserRegister, 
+    user_data: UserRegister,
     response: Response,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     user_data.email = user_data.email.lower()
-    
+
     # Check if user exists
     result = await db.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
-        
+
     # Check referral code if provided
     referrer = None
     if user_data.referral_code:
-        ref_result = await db.execute(select(User).where(User.referral_code == user_data.referral_code))
+        ref_result = await db.execute(
+            select(User).where(User.referral_code == user_data.referral_code)
+        )
         referrer = ref_result.scalar_one_or_none()
-        
+
     hashed_password = pwd_context.hash(user_data.password)
-    
+
     # +15 if referred, otherwise +10
     start_tokens = 15 if referrer else 10
-    
+
     new_user = User(
-        email=user_data.email, 
+        email=user_data.email,
         hashed_password=hashed_password,
         username=user_data.username,
         tokens=start_tokens,
-        referred_by=referrer.id if referrer else None
+        referred_by=referrer.id if referrer else None,
     )
     db.add(new_user)
-    
+
     if referrer:
         referrer.tokens += 50
         db.add(referrer)
-        
+
     await db.commit()
     await db.refresh(new_user)
-    
+
     access_token = create_access_token(data={"sub": new_user.id})
-    
+
     # Set HttpOnly cookie
     response.set_cookie(
-        key="access_token", path="/",
+        key="access_token",
+        path="/",
         value=access_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
         secure=settings.cookie_secure_effective(),
     )
-    
+
     return {
-        "access_token": access_token, 
+        "access_token": access_token,
         "token_type": "bearer",
         "user_id": new_user.id,
         "email": new_user.email,
         "username": new_user.username,
-        "tokens": new_user.tokens
+        "tokens": new_user.tokens,
     }
+
 
 @router.post("/login", response_model=Token)
 async def login(
-    payload: UserLogin, 
-    response: Response,
-    db: AsyncSession = Depends(get_db_session)
+    payload: UserLogin, response: Response, db: AsyncSession = Depends(get_db_session)
 ):
     payload.email = payload.email.lower()
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
-    
+
     if (
         not user
         or not user.hashed_password
@@ -175,27 +184,29 @@ async def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
+
     access_token = create_access_token(data={"sub": user.id})
-    
+
     # Set HttpOnly cookie
     response.set_cookie(
-        key="access_token", path="/",
+        key="access_token",
+        path="/",
         value=access_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
         secure=settings.cookie_secure_effective(),
     )
-    
+
     return {
-        "access_token": access_token, 
+        "access_token": access_token,
         "token_type": "bearer",
         "user_id": user.id,
         "email": user.email,
         "username": user.username,
-        "tokens": user.tokens
+        "tokens": user.tokens,
     }
+
 
 def _resend_api_key_effective() -> str:
     """API key for Resend HTTP (443). Many hosts block SMTP to smtp.resend.com."""
@@ -364,7 +375,8 @@ async def verify_otp(
 
     access_token = create_access_token(data={"sub": user.id})
     response.set_cookie(
-        key="access_token", path="/",
+        key="access_token",
+        path="/",
         value=access_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -387,6 +399,7 @@ async def verify_otp(
 async def logout(response: Response):
     response.delete_cookie(key="access_token")
     return {"status": "ok", "message": "Logged out successfully"}
+
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
@@ -411,6 +424,7 @@ async def claim_daily_bonus(
     Uses Redis to track the claim with a 24h TTL.
     """
     from src.redis_client import get_redis
+
     redis = get_redis()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     key = f"daily_bonus:{current_user.id}:{today}"
@@ -418,14 +432,14 @@ async def claim_daily_bonus(
     if not redis:
         raise HTTPException(
             status_code=503,
-            detail="Бонусная система временно недоступна. Попробуй позже."
+            detail="Бонусная система временно недоступна. Попробуй позже.",
         )
 
     already_claimed = await redis.get(key)
     if already_claimed:
         raise HTTPException(
             status_code=400,
-            detail="Ежедневный бонус уже получен сегодня. Возвращайся завтра!"
+            detail="Ежедневный бонус уже получен сегодня. Возвращайся завтра!",
         )
     await redis.incr(key)
     await redis.expire(key, 86400)
@@ -442,11 +456,6 @@ async def claim_daily_bonus(
         "tokens": current_user.tokens,
         "bonus": bonus,
     }
-
-
-import hashlib
-import hmac
-import time as time_module
 
 
 def _verify_telegram_hash(payload: "TelegramAuthRequest") -> bool:
@@ -475,7 +484,9 @@ def _verify_telegram_hash(payload: "TelegramAuthRequest") -> bool:
     )
 
     secret_key = hashlib.sha256(bot_token.encode()).digest()
-    computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    computed_hash = hmac.new(
+        secret_key, data_check_string.encode(), hashlib.sha256
+    ).hexdigest()
 
     # Also validate freshness (max 86400 seconds = 1 day)
     age = int(time_module.time()) - payload.auth_date
@@ -496,9 +507,9 @@ class TelegramAuthRequest(BaseModel):
 
 @router.post("/telegram", response_model=Token)
 async def telegram_auth(
-    payload: TelegramAuthRequest, 
+    payload: TelegramAuthRequest,
     response: Response,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Authenticate or register via Telegram Login Widget.
@@ -516,17 +527,18 @@ async def telegram_auth(
 
     if user:
         access_token = create_access_token(data={"sub": user.id})
-        
+
         # Set HttpOnly cookie
         response.set_cookie(
-            key="access_token", path="/",
+            key="access_token",
+            path="/",
             value=access_token,
             httponly=True,
             max_age=settings.access_token_expire_minutes * 60,
             samesite="lax",
             secure=settings.cookie_secure_effective(),
         )
-        
+
         return {
             "access_token": access_token,
             "token_type": "bearer",
@@ -549,17 +561,18 @@ async def telegram_auth(
     await db.refresh(new_user)
 
     access_token = create_access_token(data={"sub": new_user.id})
-    
+
     # Set HttpOnly cookie
     response.set_cookie(
-        key="access_token", path="/",
+        key="access_token",
+        path="/",
         value=access_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
         samesite="lax",
         secure=settings.cookie_secure_effective(),
     )
-    
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -574,6 +587,7 @@ async def telegram_auth(
 # Google OAuth
 # ============================================================================
 
+
 @router.get("/google")
 async def google_login():
     """
@@ -583,7 +597,7 @@ async def google_login():
     if not settings.google_client_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google OAuth not configured"
+            detail="Google OAuth not configured",
         )
 
     # Генерируем state для защиты от CSRF
@@ -619,10 +633,7 @@ async def google_login():
 
 @router.get("/google/callback")
 async def google_callback(
-    request: Request,
-    code: str,
-    state: str,
-    db: AsyncSession = Depends(get_db_session)
+    request: Request, code: str, state: str, db: AsyncSession = Depends(get_db_session)
 ):
     """
     Callback от Google OAuth.
@@ -633,14 +644,13 @@ async def google_callback(
     cookie_state = request.cookies.get("oauth_state")
     if not cookie_state or cookie_state != state:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid OAuth state"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state"
         )
 
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google OAuth not configured"
+            detail="Google OAuth not configured",
         )
 
     # 1. Обмениваем code на access_token
@@ -659,7 +669,7 @@ async def google_callback(
     if token_response.status_code != 200:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Failed to exchange code for token"
+            detail="Failed to exchange code for token",
         )
 
     token_json = token_response.json()
@@ -669,20 +679,20 @@ async def google_callback(
     userinfo_url = "https://www.googleapis.com/oauth2/v2/userinfo"
     async with httpx.AsyncClient() as client:
         userinfo_response = await client.get(
-            userinfo_url,
-            headers={"Authorization": f"Bearer {access_token}"}
+            userinfo_url, headers={"Authorization": f"Bearer {access_token}"}
         )
 
     if userinfo_response.status_code != 200:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Failed to fetch user info"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Failed to fetch user info"
         )
 
     userinfo = userinfo_response.json()
     google_id = userinfo.get("id")
     email = userinfo.get("email", "").lower()
-    username = userinfo.get("name", email.split("@")[0] if email else f"google_{google_id[:8]}")
+    username = userinfo.get(
+        "name", email.split("@")[0] if email else f"google_{google_id[:8]}"
+    )
     avatar_url = userinfo.get("picture")
 
     # 3. Ищем или создаем пользователя с логикой связывания по email
@@ -693,7 +703,7 @@ async def google_callback(
         username=username,
         avatar_url=avatar_url,
         provider="google",
-        provider_id_field="google_id"
+        provider_id_field="google_id",
     )
 
     # 4. Создаем JWT и устанавливаем cookie на редиректе
@@ -701,9 +711,11 @@ async def google_callback(
 
     # Редирект на фронтенд
     from fastapi.responses import RedirectResponse as _RedirectResponse
+
     redirect = _RedirectResponse(url=settings.frontend_url or "/")
     redirect.set_cookie(
-        key="access_token", path="/",
+        key="access_token",
+        path="/",
         value=jwt_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -824,7 +836,6 @@ async def _vk_id_complete_login(
     )
 
 
-
 @router.get("/vk")
 async def vk_login(request: Request):
     """
@@ -834,7 +845,7 @@ async def vk_login(request: Request):
     if not settings.vk_client_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="VK OAuth not configured"
+            detail="VK OAuth not configured",
         )
 
     mode = request.query_params.get("mode", "").strip().lower()
@@ -848,6 +859,7 @@ async def vk_login(request: Request):
     # PKCE: генерируем code_verifier и code_challenge (обязательно для VK ID)
     import hashlib
     import base64
+
     code_verifier = secrets.token_urlsafe(64)  # 86 chars
     code_challenge = (
         base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
@@ -896,10 +908,7 @@ async def vk_login(request: Request):
 
 @router.get("/vk/callback")
 async def vk_callback(
-    request: Request,
-    code: str,
-    state: str,
-    db: AsyncSession = Depends(get_db_session)
+    request: Request, code: str, state: str, db: AsyncSession = Depends(get_db_session)
 ):
     """
     Callback от VK ID OAuth.
@@ -910,15 +919,14 @@ async def vk_callback(
     cookie_state = request.cookies.get("oauth_state")
     if not cookie_state or cookie_state != state:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid OAuth state"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state"
         )
     publish_mode = cookie_state.startswith("vkpub")
 
     if not settings.vk_client_id or not settings.vk_client_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="VK OAuth not configured"
+            detail="VK OAuth not configured",
         )
     # Получаем code_verifier из cookie (PKCE)
     code_verifier = request.cookies.get("oauth_pkce", "")
@@ -948,7 +956,7 @@ async def vk_callback(
     if token_response.status_code != 200:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Failed to exchange code for token: {token_response.text}"
+            detail=f"Failed to exchange code for token: {token_response.text}",
         )
 
     token_json = token_response.json()
@@ -956,7 +964,7 @@ async def vk_callback(
     if "error" in token_json:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"VK OAuth error: {token_json.get('error_description', token_json['error'])}"
+            detail=f"VK OAuth error: {token_json.get('error_description', token_json['error'])}",
         )
 
     access_token = token_json.get("access_token")
@@ -995,11 +1003,12 @@ async def vk_callback(
 
     # Создаем JWT
     jwt_token = create_access_token(data={"sub": user.id})
-    frontend = settings.frontend_url or "https://magikbook.ru"
+    frontend = settings.frontend_url or "http://localhost:3000"
 
     # Возвращаем HTML: если popup — отправляем postMessage и закрываем;
     # если обычный tab — редиректим на главную.
     from fastapi.responses import HTMLResponse
+
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
     <script>
       if (window.opener) {{
@@ -1015,7 +1024,8 @@ async def vk_callback(
     </body></html>"""
     response = HTMLResponse(content=html)
     response.set_cookie(
-        key="access_token", path="/",
+        key="access_token",
+        path="/",
         value=jwt_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -1050,7 +1060,8 @@ async def vk_session_from_sdk(
     }
     response = JSONResponse(content=body)
     response.set_cookie(
-        key="access_token", path="/",
+        key="access_token",
+        path="/",
         value=jwt_token,
         httponly=True,
         max_age=settings.access_token_expire_minutes * 60,
@@ -1076,7 +1087,11 @@ async def vk_save_publish_token(
             detail="Access denied",
         )
     _save_vk_publish_token(payload.access_token)
-    logger.info("VK publish token saved by admin %s (first 8 chars: %s)", current_user.id, payload.access_token[:8])
+    logger.info(
+        "VK publish token saved by admin %s (first 8 chars: %s)",
+        current_user.id,
+        payload.access_token[:8],
+    )
     return {"status": "ok", "message": "VK publish token saved"}
 
 
@@ -1136,6 +1151,7 @@ async def vk_publish_token_status(
 # OAuth Account Linking Helper
 # ============================================================================
 
+
 async def _find_or_create_oauth_user(
     db: AsyncSession,
     oauth_id: str,
@@ -1143,7 +1159,7 @@ async def _find_or_create_oauth_user(
     username: str,
     avatar_url: Optional[str],
     provider: str,
-    provider_id_field: str
+    provider_id_field: str,
 ) -> User:
     """
     Универсальная функция для поиска или создания пользователя через OAuth.
@@ -1174,7 +1190,11 @@ async def _find_or_create_oauth_user(
         return existing_by_id
 
     # 2. Если email предоставлен, ищем по email для связывания
-    if email and not email.endswith("@vk.local") and not email.endswith("@telegram.local"):
+    if (
+        email
+        and not email.endswith("@vk.local")
+        and not email.endswith("@telegram.local")
+    ):
         email_result = await db.execute(select(User).where(User.email == email))
         existing_by_email = email_result.scalar_one_or_none()
         if existing_by_email:
@@ -1182,7 +1202,10 @@ async def _find_or_create_oauth_user(
             setattr(existing_by_email, provider_id_field, oauth_id)
             if avatar_url:
                 existing_by_email.avatar_url = avatar_url
-            if not existing_by_email.auth_provider or existing_by_email.auth_provider == "email":
+            if (
+                not existing_by_email.auth_provider
+                or existing_by_email.auth_provider == "email"
+            ):
                 existing_by_email.auth_provider = provider
             await db.commit()
             await db.refresh(existing_by_email)

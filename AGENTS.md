@@ -80,9 +80,7 @@
 - Коммить результат задачи — часть работы.
 - Пушь, если пользователь просил или задача явно требует публикации.
 - **Текущая ветка:** `main`.
-- **Remotes:**
-  - `origin` — `git@github.com:Shugar86/magikbook-api.git`
-  - `vds` — `vds-root:/root/git/magikbook-api.git`
+- **Remote:** `origin` — `git@github.com:Shugar86/magikbook-api.git`
 
 ### Сообщения коммитов
 

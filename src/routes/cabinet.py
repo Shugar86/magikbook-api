@@ -50,8 +50,10 @@ async def get_cabinet_overview(
         can_claim_bonus = True
 
     # Get saved prompts count by user_id
-    saved_count_query = select(func.count()).select_from(SavedPrompt).where(
-        SavedPrompt.user_id == current_user.id
+    saved_count_query = (
+        select(func.count())
+        .select_from(SavedPrompt)
+        .where(SavedPrompt.user_id == current_user.id)
     )
     saved_count = (await db.scalar(saved_count_query)) or 0
 
@@ -63,9 +65,7 @@ async def get_cabinet_overview(
     # Calculate stats (published = в ленте, считаем вместе с approved для «Одобрено» в кабинете)
     submitted_count = len(user_prompts)
     approved_count = sum(
-        1
-        for p in user_prompts
-        if p.moderation_status in ("approved", "published")
+        1 for p in user_prompts if p.moderation_status in ("approved", "published")
     )
     pending_count = sum(1 for p in user_prompts if p.moderation_status == "pending")
     rejected_count = sum(1 for p in user_prompts if p.moderation_status == "rejected")
@@ -75,8 +75,7 @@ async def get_cabinet_overview(
     # Find top prompt (by likes_count + copies, only approved/published)
     top_prompt: Optional[CabinetTopPrompt] = None
     approved_prompts = [
-        p for p in user_prompts
-        if p.moderation_status in ("approved", "published")
+        p for p in user_prompts if p.moderation_status in ("approved", "published")
     ]
     if approved_prompts:
         best_prompt = max(approved_prompts, key=lambda p: p.likes_count + p.copies)

@@ -86,6 +86,19 @@ docker run --rm -it \
 
 ---
 
+## 📍 С чего начать чтение
+
+Чтобы разобраться в проекте за ~15 минут, читай в таком порядке:
+
+1. **`src/main.py`** — FastAPI app, lifespan, подключение роутеров, `/health`.
+2. **`src/config.py`** — Pydantic Settings: все переменные окружения и дефолты.
+3. **`src/routes/prompts.py`** и **`src/routes/moderation.py`** — загрузка промптов, статусы модерации, approve/reject.
+4. **`src/services/vk_publisher.py`** / **`telegram_publisher.py`** — как постится в соцсети.
+5. **`src/services/battle_service.py`** / **`elo_service.py`** — битва и пересчёт рейтинга ELO.
+6. **`migrations/`** + **`alembic.ini`** — схема БД и версионирование.
+
+---
+
 ## 🏗️ Архитектура / стек
 
 | Область | Технология | Назначение |
@@ -203,12 +216,9 @@ curl -X POST \
 | Файл | Описание |
 |------|----------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Системная схема, модели, ELO, Gemini |
-| [SETUP_GUIDE.md](SETUP_GUIDE.md) | Настройка OAuth, VK/Telegram, БД, nginx |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Ветки, PR, CI, стиль коммитов |
 | [CHANGELOG.md](CHANGELOG.md) | История изменений |
 | [AGENTS.md](AGENTS.md) | Контракт для AI-агентов |
-| [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md) | Чеклист перед боем |
-| [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) | Пошаговый деплой |
 
 ---
 

@@ -5,15 +5,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_db_session
-from src.dependencies import get_current_user, get_optional_user
+from src.dependencies import get_current_user
 from src.models.db_models import User
 from src.models.schemas import (
-    FeedResponse,
-    HomepageResponse,
     LikeResponse,
     OgMeta,
     PromptCreate,
-    PromptOut,
 )
 from src.services.prompt_service import PromptService
 
@@ -36,7 +33,9 @@ async def get_homepage_data(svc: PromptService = Depends(_service)):
 @router.get("/feed")
 async def get_prompts_feed(
     media_type: Optional[str] = None,
-    category: Optional[List[str]] = Query(None, description="Рубрики (OR): повторяющийся query-параметр category"),
+    category: Optional[List[str]] = Query(
+        None, description="Рубрики (OR): повторяющийся query-параметр category"
+    ),
     filter: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
@@ -146,7 +145,7 @@ async def get_like_status(
     Check if current user has liked this prompt.
     Returns {liked: true/false, likes_count: number}
     """
-    from sqlalchemy import select, func
+    from sqlalchemy import select
     from src.models.db_models import Like, Prompt
 
     # Get prompt with likes count

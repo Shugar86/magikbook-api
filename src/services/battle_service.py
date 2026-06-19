@@ -7,6 +7,7 @@
   K = 32 (стандартный коэффициент)
   Минимальный рейтинг: 800
 """
+
 import logging
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +38,11 @@ class BattleService:
         return [PromptOut.model_validate(p) for p in result.scalars().all()]
 
     async def check_already_voted(
-        self, winner_id: str, loser_id: str, user_id: str = None, session_token: str = None
+        self,
+        winner_id: str,
+        loser_id: str,
+        user_id: str = None,
+        session_token: str = None,
     ) -> bool:
         """Check if user already voted on this specific pair."""
         if user_id:
@@ -62,7 +67,7 @@ class BattleService:
 
     async def get_vote_percentages(self, prompt_id: str) -> tuple[int, int]:
         """Get vote percentages for a prompt in all its battles.
-        
+
         Returns: (win_percentage, total_votes)
         """
         # Count wins
@@ -85,7 +90,11 @@ class BattleService:
         return win_pct, total
 
     async def record_vote(
-        self, winner_id: str, loser_id: str, user_id: str = None, session_token: str = None
+        self,
+        winner_id: str,
+        loser_id: str,
+        user_id: str = None,
+        session_token: str = None,
     ) -> dict:
         """Record a battle vote and update ELO ratings."""
         from fastapi import HTTPException
@@ -97,9 +106,13 @@ class BattleService:
             raise HTTPException(status_code=404, detail="One or both prompts not found")
 
         # Check if already voted
-        already_voted = await self.check_already_voted(winner_id, loser_id, user_id, session_token)
+        already_voted = await self.check_already_voted(
+            winner_id, loser_id, user_id, session_token
+        )
         if already_voted:
-            raise HTTPException(status_code=409, detail="You already voted on this battle")
+            raise HTTPException(
+                status_code=409, detail="You already voted on this battle"
+            )
 
         # Record the vote
         vote = BattleVote(

@@ -10,6 +10,8 @@ build/
 
 # Virtual environment
 .env
+.env.local
+.env.production
 .venv
 env/
 venv/
@@ -30,6 +32,7 @@ alembic/versions/*.py~
 .idea/
 .vscode/
 .cursor/
+.cursorrules
 *.swp
 
 # SQLite backups on server
@@ -45,6 +48,7 @@ Thumbs.db
 
 # Pytest
 .pytest_cache/
+.ruff_cache/
 htmlcov/
 .coverage
 

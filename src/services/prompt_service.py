@@ -2,6 +2,7 @@
 
 Роуты в routes/prompts.py только вызывают методы этого класса.
 """
+
 import json
 import logging
 import re
@@ -34,7 +35,9 @@ class PromptService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _authors_by_ids(self, author_ids: Sequence[Optional[str]]) -> dict[str, tuple[str, Optional[str]]]:
+    async def _authors_by_ids(
+        self, author_ids: Sequence[Optional[str]]
+    ) -> dict[str, tuple[str, Optional[str]]]:
         """Load username and avatar_url for distinct author IDs."""
         unique = {aid for aid in author_ids if aid}
         if not unique:
@@ -58,7 +61,9 @@ class PromptService:
             update={"author_username": username, "author_avatar_url": avatar_url}
         )
 
-    async def _serialize_prompts_with_authors(self, prompts: Sequence[Prompt]) -> list[PromptOut]:
+    async def _serialize_prompts_with_authors(
+        self, prompts: Sequence[Prompt]
+    ) -> list[PromptOut]:
         """Batch-resolve authors for a list of prompts."""
         authors = await self._authors_by_ids([p.author_id for p in prompts])
         return [self._prompt_out_with_authors(p, authors) for p in prompts]
@@ -67,18 +72,24 @@ class PromptService:
 
     async def get_stats(self) -> SiteStats:
         """Get site-wide prompt statistics."""
-        text_count = await self.db.scalar(
-            select(func.count())
-            .select_from(Prompt)
-            .where(Prompt.media_type == "text")
-            .where(Prompt.moderation_status.in_(["approved", "published"]))
-        ) or 0
-        image_count = await self.db.scalar(
-            select(func.count())
-            .select_from(Prompt)
-            .where(Prompt.media_type.in_(["image", "video"]))
-            .where(Prompt.moderation_status.in_(["approved", "published"]))
-        ) or 0
+        text_count = (
+            await self.db.scalar(
+                select(func.count())
+                .select_from(Prompt)
+                .where(Prompt.media_type == "text")
+                .where(Prompt.moderation_status.in_(["approved", "published"]))
+            )
+            or 0
+        )
+        image_count = (
+            await self.db.scalar(
+                select(func.count())
+                .select_from(Prompt)
+                .where(Prompt.media_type.in_(["image", "video"]))
+                .where(Prompt.moderation_status.in_(["approved", "published"]))
+            )
+            or 0
+        )
         return SiteStats(
             text_count=text_count,
             image_count=image_count,
@@ -209,7 +220,9 @@ class PromptService:
         }
         prompts_out = [self._prompt_out_with_authors(p, authors_map) for p in prompts]
         return PortfolioResponse(
-            user=PortfolioUserPublic(username=user.username, avatar_url=user.avatar_url),
+            user=PortfolioUserPublic(
+                username=user.username, avatar_url=user.avatar_url
+            ),
             prompts=prompts_out,
         )
 
@@ -247,7 +260,9 @@ class PromptService:
         # Handle affiliate_links if provided
         affiliate_links_str = None
         if payload.affiliate_links:
-            affiliate_links_str = json.dumps(payload.affiliate_links, ensure_ascii=False)
+            affiliate_links_str = json.dumps(
+                payload.affiliate_links, ensure_ascii=False
+            )
 
         prompt = Prompt(
             title=payload.title.strip() or "Без названия",

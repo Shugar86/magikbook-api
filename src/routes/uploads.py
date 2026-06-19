@@ -10,7 +10,6 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import settings
 from src.database import get_db_session
 from src.dependencies import get_current_user
 from src.models.db_models import BattleVote, Prompt, User
@@ -66,7 +65,7 @@ async def upload_prompt(
     result_image_url: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Загрузка нового промпта с файлом (для image/video).
@@ -91,12 +90,12 @@ async def upload_prompt(
         if not file:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File is required for {media_type} prompts"
+                detail=f"File is required for {media_type} prompts",
             )
         if not ai_model:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="ai_model is required for image/video prompts (e.g., 'Midjourney', 'DALL-E')"
+                detail="ai_model is required for image/video prompts (e.g., 'Midjourney', 'DALL-E')",
             )
 
     # Валидация файла (если есть)
@@ -105,7 +104,7 @@ async def upload_prompt(
         await validate_file(file, media_type)
 
     # Извлекаем переменные из prompt_text
-    variables = list(set(re.findall(r'\{([^}]+)\}', prompt_text)))
+    variables = list(set(re.findall(r"\{([^}]+)\}", prompt_text)))
     variables_str = json.dumps(variables) if variables else None
 
     # Определяем target_models на основе media_type
@@ -138,9 +137,7 @@ async def upload_prompt(
     if file:
         try:
             file_path = await save_upload_file(
-                file=file,
-                user_id=current_user.id,
-                prompt_id=prompt.id
+                file=file, user_id=current_user.id, prompt_id=prompt.id
             )
             # Обновляем запись с путем к файлу
             prompt.file_path = file_path
@@ -151,7 +148,7 @@ async def upload_prompt(
             await db.commit()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to save file: {str(e)}"
+                detail=f"Failed to save file: {str(e)}",
             )
 
     return {
@@ -166,7 +163,7 @@ async def upload_prompt(
             "file_path": prompt.file_path,
             "author_id": prompt.author_id,
         },
-        "message": "Промпт отправлен на модерацию. Он появится в ленте после проверки."
+        "message": "Промпт отправлен на модерацию. Он появится в ленте после проверки.",
     }
 
 
@@ -174,7 +171,7 @@ async def upload_prompt(
 async def get_my_uploads(
     moderation_status: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Получить список загруженных пользователем промптов.
@@ -202,12 +199,12 @@ async def get_my_uploads(
     wins_map, losses_map = await _battle_wins_and_losses_by_prompt(db, ids)
 
     def battle_fields(prompt_id: str) -> dict[str, float | int]:
-        w = wins_map.get(prompt_id, 0)
-        l = losses_map.get(prompt_id, 0)
-        total = w + l
-        pct = round((w / total) * 100.0, 1) if total > 0 else 0.0
+        wins = wins_map.get(prompt_id, 0)
+        losses = losses_map.get(prompt_id, 0)
+        total = wins + losses
+        pct = round((wins / total) * 100.0, 1) if total > 0 else 0.0
         return {
-            "battle_wins": w,
+            "battle_wins": wins,
             "battle_total_votes": total,
             "win_percentage": pct,
         }
@@ -232,5 +229,5 @@ async def get_my_uploads(
             }
             for p in prompts
         ],
-        "total": len(prompts)
+        "total": len(prompts),
     }

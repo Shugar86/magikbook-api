@@ -45,7 +45,9 @@ def _resolve_wall_media_kind(file_path: str, media_type: Optional[str]) -> str:
     return "image"
 
 
-async def _vk_video_get_metadata(owner_id: int, video_id: int) -> tuple[Optional[str], Optional[str]]:
+async def _vk_video_get_metadata(
+    owner_id: int, video_id: int
+) -> tuple[Optional[str], Optional[str]]:
     """
     Запрашивает video.get: access_key для video_ext.php (параметр hash) и URL превью.
 
@@ -165,7 +167,11 @@ async def publish_to_vk(
             logger.error("Failed to upload photo to VK: %s", e)
             raise
         attachments = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-        thumb = photo_data.get("sizes", [{}])[-1].get("url", "") if photo_data.get("sizes") else None
+        thumb = (
+            photo_data.get("sizes", [{}])[-1].get("url", "")
+            if photo_data.get("sizes")
+            else None
+        )
 
     post_url = "https://api.vk.com/method/wall.post"
     post_params: dict[str, Any] = {
@@ -275,7 +281,9 @@ async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
     try:
         file_data = file_response.json()
     except ValueError as e:
-        raise Exception(f"VK upload: non-JSON response: {file_response.text[:500]}") from e
+        raise Exception(
+            f"VK upload: non-JSON response: {file_response.text[:500]}"
+        ) from e
 
     photo_val = file_data.get("photo")
     if not photo_val and photo_val != 0:
@@ -324,7 +332,9 @@ async def _upload_photo_to_vk(file_path: str, group_id: str) -> dict:
     return save_data["response"][0]
 
 
-async def _upload_video_to_vk(file_path: str, vk_group_id: str, title: str) -> dict[str, Any]:
+async def _upload_video_to_vk(
+    file_path: str, vk_group_id: str, title: str
+) -> dict[str, Any]:
     """
     Загружает видео через video.save + POST на upload_url.
 
@@ -368,7 +378,11 @@ async def _upload_video_to_vk(file_path: str, vk_group_id: str, title: str) -> d
     except ValueError as e:
         raise Exception(f"VK video upload: non-JSON response: {up.text[:300]}") from e
 
-    if isinstance(up_data, dict) and "response" in up_data and isinstance(up_data["response"], dict):
+    if (
+        isinstance(up_data, dict)
+        and "response" in up_data
+        and isinstance(up_data["response"], dict)
+    ):
         up_data = up_data["response"]
 
     if isinstance(up_data, dict) and up_data.get("error"):
@@ -404,8 +418,8 @@ def _format_vk_message(
     prompt_id: str,
 ) -> str:
     """Форматирует сообщение для публикации в VK (BBCode-ссылка — см. post-format в доке VK)."""
-    # Публичная ссылка на промпт: в проде обычно https://magikbook.ru (см. frontend_url в .env)
-    base = (settings.frontend_url or "https://magikbook.ru").rstrip("/")
+    # Публичная ссылка на промпт: берётся из FRONTEND_URL (.env), fallback — localhost.
+    base = (settings.frontend_url or "http://localhost:3000").rstrip("/")
     if not base.startswith("http"):
         base = f"https://{base}"
     prompt_url = f"{base}/prompt/{prompt_id}"

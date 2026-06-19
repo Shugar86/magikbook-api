@@ -1,4 +1,5 @@
 """Security-related tests."""
+
 import pytest
 from httpx import AsyncClient
 

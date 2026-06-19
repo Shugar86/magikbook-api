@@ -3,10 +3,9 @@ Redis client with automatic fallback:
 - If REDIS_URL is set in env: uses real redis.asyncio with full TTL support
 - Otherwise: uses enhanced in-memory stub (dev mode, supports expire/setex)
 """
-import asyncio
+
 import logging
 import time
-from collections import defaultdict
 from typing import Any
 
 from src.config import settings
@@ -15,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 # ─── In-memory fallback (dev) ────────────────────────────────────────────────
+
 
 class _InMemoryRedis:
     """Thread-safe in-memory Redis stub with TTL support for development."""
@@ -74,7 +74,12 @@ class _InMemoryRedis:
     async def keys(self, pattern: str) -> list[bytes]:
         """Simple glob-style key listing (supports * at end or middle)."""
         import fnmatch
-        return [k.encode() for k in list(self._store.keys()) if fnmatch.fnmatch(k, pattern) and not self._is_expired(k)]
+
+        return [
+            k.encode()
+            for k in list(self._store.keys())
+            if fnmatch.fnmatch(k, pattern) and not self._is_expired(k)
+        ]
 
     async def delete(self, *keys):
         for k in keys:
@@ -99,6 +104,7 @@ async def init_redis() -> None:
     if settings.redis_url:
         try:
             import redis.asyncio as aioredis
+
             client = aioredis.from_url(
                 settings.redis_url,
                 encoding="utf-8",
@@ -109,7 +115,9 @@ async def init_redis() -> None:
             logger.info("Connected to Redis at %s", settings.redis_url)
             return
         except Exception as e:
-            logger.warning("Failed to connect to Redis (%s). Falling back to in-memory stub.", e)
+            logger.warning(
+                "Failed to connect to Redis (%s). Falling back to in-memory stub.", e
+            )
 
     redis_client = _InMemoryRedis()
     logger.info("Using in-memory Redis stub (dev mode)")

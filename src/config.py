@@ -21,11 +21,11 @@ class Settings(BaseSettings):
     # OAuth Configuration
     google_client_id: str = ""
     google_client_secret: str = ""
-    google_redirect_uri: str = "https://magikbook.ru/api/auth/google/callback"
+    google_redirect_uri: str = "http://localhost:8000/api/auth/google/callback"
 
     vk_client_id: str = ""
     vk_client_secret: str = ""
-    vk_redirect_uri: str = "https://magikbook.ru/api/auth/vk/callback"
+    vk_redirect_uri: str = "http://localhost:8000/api/auth/vk/callback"
 
     # File Upload Configuration
     upload_dir: str = "./uploads/temp"
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     smtp_port: int = 465
     smtp_user: str = ""
     smtp_password: str = ""
-    smtp_from: str = "noreply@magikbook.ru"
+    smtp_from: str = "noreply@example.com"
     # Если задан — отправка OTP через Resend HTTPS API (порт 443). Иначе при SMTP_HOST=smtp.resend.com
     # используется SMTP_PASSWORD как API key и тот же API.
     resend_api_key: str = ""

@@ -8,9 +8,6 @@ python -m scripts.seed_db
 
 # Засеять текстовые промпты
 python -m scripts.seed_text_prompts
-
-# Импортировать данные из CSV/JSON
-python -m scripts.import_temp_data
 ```
 
 ## Требования

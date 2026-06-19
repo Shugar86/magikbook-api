@@ -1,6 +1,8 @@
 class EloService:
     @staticmethod
-    def calculate_new_ratings(rating_winner: int, rating_loser: int, k_factor: int = 32) -> tuple[int, int]:
+    def calculate_new_ratings(
+        rating_winner: int, rating_loser: int, k_factor: int = 32
+    ) -> tuple[int, int]:
         """Calculates new Elo ratings for a winner and loser."""
         expected_winner = 1 / (1 + 10 ** ((rating_loser - rating_winner) / 400))
         expected_loser = 1 / (1 + 10 ** ((rating_winner - rating_loser) / 400))
