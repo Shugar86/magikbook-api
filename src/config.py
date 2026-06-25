@@ -1,4 +1,5 @@
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -48,16 +49,16 @@ class Settings(BaseSettings):
     # Daily prompt auto-generation via Gemini (arq cron 00:00 UTC).
     # Set to true in .env to re-enable. Default: disabled.
     daily_prompt_enabled: bool = Field(default=False)
+    # Auto-create tables from SQLModel metadata (development convenience only).
+    auto_init_db: bool = Field(default=True)
 
-    # SMTP (email OTP) — на многих VPS исходящий SMTP (465/587) заблокирован
+    # SMTP (email OTP)
     smtp_host: str = "smtp.yandex.ru"
     smtp_port: int = 465
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = "noreply@example.com"
-    # Если задан — отправка OTP через Resend HTTPS API (порт 443). Иначе при SMTP_HOST=smtp.resend.com
-    # используется SMTP_PASSWORD как API key и тот же API.
-    resend_api_key: str = ""
+    vk_publish_token_path: str = ".secrets/vk_publish_access_token.txt"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
@@ -66,6 +67,12 @@ class Settings(BaseSettings):
         if self.cookie_secure is not None:
             return self.cookie_secure
         return self.environment.lower() == "production"
+
+    def frontend_origin(self) -> str:
+        parsed = urlparse(self.frontend_url)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return "http://localhost:3000"
 
 
 settings = Settings()

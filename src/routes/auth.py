@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from jose import jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
@@ -23,12 +23,13 @@ from src.config import settings
 from src.database import get_db_session
 from src.models.db_models import EmailOTP, User
 from src.dependencies import get_current_user
+from src.validation.ru_email import RU_EMAIL_ERROR, is_ru_provider_email, normalize_email
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth")
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-VK_PUBLISH_TOKEN_PATH = Path("uploads/vk_publish_access_token.txt")
+pwd_context = CryptContext(schemes=["bcrypt", "pbkdf2_sha256"], deprecated="auto")
+VK_PUBLISH_TOKEN_PATH = Path(settings.vk_publish_token_path)
 
 
 def _save_vk_publish_token(token: str) -> None:
@@ -39,14 +40,35 @@ def _save_vk_publish_token(token: str) -> None:
 
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=8, max_length=128)
     username: str = Field(min_length=2, max_length=50)
     referral_code: Optional[str] = None
 
+    @field_validator("email")
+    @classmethod
+    def validate_ru_email(cls, value: str) -> str:
+        normalized = normalize_email(str(value))
+        if not is_ru_provider_email(normalized):
+            raise ValueError(RU_EMAIL_ERROR)
+        return normalized
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value: str) -> str:
+        trimmed = value.strip()
+        if len(trimmed) < 2:
+            raise ValueError("Имя должно содержать минимум 2 символа")
+        return trimmed
+
 
 class UserLogin(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_login_email(cls, value: str) -> str:
+        return normalize_email(str(value))
 
 
 class Token(BaseModel):
@@ -63,6 +85,14 @@ class Token(BaseModel):
 class SendOTPBody(BaseModel):
     email: EmailStr
 
+    @field_validator("email")
+    @classmethod
+    def validate_ru_email(cls, value: str) -> str:
+        normalized = normalize_email(str(value))
+        if not is_ru_provider_email(normalized):
+            raise ValueError(RU_EMAIL_ERROR)
+        return normalized
+
 
 class SendOTPResponse(BaseModel):
     status: str
@@ -73,6 +103,14 @@ class VerifyOTPBody(BaseModel):
     email: EmailStr
     code: str = Field(min_length=6, max_length=6)
     username: Optional[str] = Field(default=None, max_length=50)
+
+    @field_validator("email")
+    @classmethod
+    def validate_ru_email(cls, value: str) -> str:
+        normalized = normalize_email(str(value))
+        if not is_ru_provider_email(normalized):
+            raise ValueError(RU_EMAIL_ERROR)
+        return normalized
 
 
 class VkSavePublishTokenBody(BaseModel):
@@ -107,12 +145,10 @@ async def register(
     response: Response,
     db: AsyncSession = Depends(get_db_session),
 ):
-    user_data.email = user_data.email.lower()
-
     # Check if user exists
     result = await db.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Email уже зарегистрирован")
 
     # Check referral code if provided
     referrer = None
@@ -133,6 +169,7 @@ async def register(
         username=user_data.username,
         tokens=start_tokens,
         referred_by=referrer.id if referrer else None,
+        auth_provider="email",
     )
     db.add(new_user)
 
@@ -170,7 +207,6 @@ async def register(
 async def login(
     payload: UserLogin, response: Response, db: AsyncSession = Depends(get_db_session)
 ):
-    payload.email = payload.email.lower()
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
 
@@ -181,9 +217,15 @@ async def login(
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Неверный email или пароль",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if pwd_context.needs_update(user.hashed_password):
+        user.hashed_password = pwd_context.hash(payload.password)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
 
     access_token = create_access_token(data={"sub": user.id})
 
@@ -208,53 +250,7 @@ async def login(
     }
 
 
-def _resend_api_key_effective() -> str:
-    """API key for Resend HTTP (443). Many hosts block SMTP to smtp.resend.com."""
-    explicit = (settings.resend_api_key or "").strip()
-    if explicit:
-        return explicit
-    if (settings.smtp_host or "").strip().lower() == "smtp.resend.com":
-        return (settings.smtp_password or "").strip()
-    return ""
-
-
-async def _send_otp_via_resend_api(to_email: str, code: str, api_key: str) -> None:
-    """Send OTP using Resend REST API (works when outbound SMTP is firewall-blocked)."""
-    from_addr = (settings.smtp_from or "").strip() or "onboarding@resend.dev"
-    subject = f"Ваш код входа в MagikBook: {code}"
-    text_body = f"Ваш код: {code}. Действует 10 минут."
-    html_body = f"<p>Ваш код: <b>{code}</b>. Действует 10 минут.</p>"
-    payload = {
-        "from": from_addr,
-        "to": [to_email],
-        "subject": subject,
-        "text": text_body,
-        "html": html_body,
-    }
-    async with httpx.AsyncClient(timeout=25.0) as client:
-        response = await client.post(
-            "https://api.resend.com/emails",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
-    if response.status_code >= 400:
-        logger.error(
-            "Resend API rejected email: status=%s body=%s",
-            response.status_code,
-            response.text[:500],
-        )
-        raise RuntimeError(f"Resend API error {response.status_code}")
-
-
 async def _send_otp_email(to_email: str, code: str) -> None:
-    resend_key = _resend_api_key_effective()
-    if resend_key:
-        await _send_otp_via_resend_api(to_email, code, resend_key)
-        return
-
     if not settings.smtp_user or not settings.smtp_password:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -293,22 +289,29 @@ async def send_otp(body: SendOTPBody, db: AsyncSession = Depends(get_db_session)
                 detail="Подождите минуту перед повторной отправкой кода.",
             )
     await db.execute(delete(EmailOTP).where(EmailOTP.email == email_norm))
-    await db.commit()
 
     code = f"{secrets.randbelow(900000) + 100000:d}"
     row = EmailOTP(email=email_norm, code=code)
     db.add(row)
-    await db.commit()
+    await db.flush()
 
     try:
         await _send_otp_email(email_norm, code)
     except HTTPException:
+        await db.rollback()
+        if redis:
+            await redis.set(rate_key, "1", ex=15)
         raise
     except Exception as exc:
+        await db.rollback()
+        if redis:
+            await redis.set(rate_key, "1", ex=15)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Не удалось отправить письмо. Попробуйте позже.",
         ) from exc
+
+    await db.commit()
 
     if redis:
         await redis.set(rate_key, "1", ex=60)
@@ -325,9 +328,27 @@ async def verify_otp(
     response: Response,
     db: AsyncSession = Depends(get_db_session),
 ):
+    from src.redis_client import get_redis
+
     email_norm = body.email.lower()
+    redis = get_redis()
+    verify_rate_key = f"otp_verify_fail:{email_norm}"
+    if redis:
+        fail_attempts = await redis.get(verify_rate_key)
+        if fail_attempts and int(fail_attempts) >= 8:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Слишком много попыток. Попробуйте снова через 10 минут.",
+            )
+
+    async def mark_failed_attempt() -> None:
+        if redis:
+            await redis.incr(verify_rate_key)
+            await redis.expire(verify_rate_key, 600)
+
     code_digits = "".join(c for c in body.code if c.isdigit())
     if len(code_digits) != 6:
+        await mark_failed_attempt()
         raise HTTPException(status_code=400, detail="Код неверный или истёк")
 
     now = datetime.now(timezone.utc)
@@ -343,11 +364,13 @@ async def verify_otp(
     )
     otp_row = result.scalar_one_or_none()
     if not otp_row:
+        await mark_failed_attempt()
         raise HTTPException(status_code=400, detail="Код неверный или истёк")
     created = otp_row.created_at
     if created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
     if created < cutoff or otp_row.code != code_digits:
+        await mark_failed_attempt()
         raise HTTPException(status_code=400, detail="Код неверный или истёк")
 
     otp_row.used = True
@@ -372,6 +395,8 @@ async def verify_otp(
 
     await db.commit()
     await db.refresh(user)
+    if redis:
+        await redis.delete(verify_rate_key)
 
     access_token = create_access_token(data={"sub": user.id})
     response.set_cookie(
@@ -465,7 +490,10 @@ def _verify_telegram_hash(payload: "TelegramAuthRequest") -> bool:
     """
     bot_token = settings.telegram_bot_token
     if not bot_token:
-        # If no bot token configured, skip verification (dev only)
+        if settings.environment.lower() == "production":
+            logger.error("TELEGRAM_BOT_TOKEN is required in production")
+            return False
+        logger.warning("TELEGRAM_BOT_TOKEN is empty; Telegram auth check skipped in development")
         return True
 
     received_hash = payload.hash
@@ -979,11 +1007,12 @@ async def vk_callback(
         _save_vk_publish_token(access_token)
         from fastapi.responses import HTMLResponse
 
-        html = """<!DOCTYPE html><html><body>
+        origin = settings.frontend_origin()
+        html = f"""<!DOCTYPE html><html><body>
         <script>
-          if (window.opener) {
-            window.opener.postMessage({ type: 'oauth_success', mode: 'publish' }, '*');
-          }
+          if (window.opener) {{
+            window.opener.postMessage({{ type: 'oauth_success', mode: 'publish' }}, '{origin}');
+          }}
           window.close();
         </script>
         <p>VK publish token saved on server. This window can be closed.</p>
@@ -1013,7 +1042,7 @@ async def vk_callback(
     <script>
       if (window.opener) {{
         // Popup mode — notify parent and close
-        window.opener.postMessage({{ type: 'vk_login_success', status: 'ok' }}, '*');
+        window.opener.postMessage({{ type: 'vk_login_success', status: 'ok' }}, '{settings.frontend_origin()}');
         window.close();
       }} else {{
         // Regular redirect mode

@@ -32,7 +32,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup: connect to db, redis, etc.
     logger.info("Starting MagikBook API")
-    await init_db()
+    environment = settings.environment.lower()
+    if environment == "production" and settings.secret_key == "secret":
+        raise RuntimeError("SECRET_KEY must be set in production")
+    if settings.auto_init_db and environment != "production":
+        await init_db()
+    else:
+        logger.info("Skipping SQLModel create_all (AUTO_INIT_DB=%s, environment=%s)", settings.auto_init_db, environment)
     await init_redis()
     yield
     # Shutdown: close connections
