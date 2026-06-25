@@ -11,7 +11,7 @@ arq==0.27.0
 async-timeout==5.0.1
 asyncpg==0.31.0
 attrs==25.4.0
-bcrypt==5.0.0
+bcrypt==4.3.0
 certifi==2026.2.25
 cffi==2.0.0
 charset-normalizer==3.4.4
